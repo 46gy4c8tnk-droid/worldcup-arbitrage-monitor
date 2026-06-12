@@ -24,6 +24,8 @@ DEFAULT_CONFIG = {
     "max_stake": 2000.0,
     "initial_balance": 10000.0,
     "auto_bet": True,
+    # Betfair 是交易所赔率（未扣 ~5% 佣金），与博彩商直接比价会产生假套利
+    "excluded_bookmakers": ["Betfair"],
 }
 
 # 真实模式轮询间隔下限，防止误配置打爆 API 配额
@@ -217,6 +219,10 @@ class Engine:
             if quota:
                 self.quota = quota
             self.opportunities = self._scan(events)
+            if mode == "live":
+                self._log("poll",
+                          f"抓取成功：{len(events)} 场比赛，"
+                          f"{len(self.opportunities)} 个套利机会")
 
     def _scan(self, events):
         """对每场比赛取各结果的最优赔率，计算套利空间并自动下单。"""

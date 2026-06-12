@@ -103,6 +103,7 @@ class OddsApiSource:
 
     def __init__(self):
         self.sport_key = None
+        self.excluded = set()   # 不支持 h2h 的赛事键（如冠军竞猜盘）
 
     def get_events(self, config):
         api_key = config.get("odds_api_key", "").strip()
@@ -110,16 +111,20 @@ class OddsApiSource:
             raise RuntimeError("未配置 The Odds API key（在设置面板填入）")
 
         sport = self._resolve_sport(config, api_key)
-        resp = requests.get(
-            f"{ODDS_API_BASE}/sports/{sport}/odds",
-            params={
-                "apiKey": api_key,
-                "regions": config.get("region", "au"),
-                "markets": "h2h",
-                "oddsFormat": "decimal",
-            },
-            timeout=25,
-        )
+        # 注意：错误信息绝不能带 URL/参数，否则 apiKey 会泄露到日志
+        try:
+            resp = requests.get(
+                f"{ODDS_API_BASE}/sports/{sport}/odds",
+                params={
+                    "apiKey": api_key,
+                    "regions": config.get("region", "au"),
+                    "markets": "h2h",
+                    "oddsFormat": "decimal",
+                },
+                timeout=25,
+            )
+        except requests.RequestException as e:
+            raise RuntimeError(f"网络请求失败（{type(e).__name__}）") from None
         quota = {
             "remaining": resp.headers.get("x-requests-remaining"),
             "used": resp.headers.get("x-requests-used"),
@@ -128,18 +133,28 @@ class OddsApiSource:
             raise RuntimeError("API key 无效（401）")
         if resp.status_code == 429:
             raise RuntimeError("请求过于频繁（429），已自动延长轮询间隔")
-        resp.raise_for_status()
+        if resp.status_code == 422:
+            self.excluded.add(sport)
+            self.sport_key = None
+            raise RuntimeError(f"赛事 {sport} 不支持 h2h 市场，已排除并将自动重选")
+        if resp.status_code >= 400:
+            raise RuntimeError(f"The Odds API 返回 HTTP {resp.status_code}")
 
+        excluded = [name.lower()
+                    for name in config.get("excluded_bookmakers", [])]
         events = []
         for ev in resp.json():
             prices = {}
             for bm in ev.get("bookmakers", []):
+                title = bm.get("title", bm.get("key", "?"))
+                if any(x in title.lower() for x in excluded):
+                    continue
                 for market in bm.get("markets", []):
                     if market.get("key") != "h2h":
                         continue
                     for oc in market.get("outcomes", []):
                         prices.setdefault(oc["name"], []).append(
-                            (bm.get("title", bm.get("key", "?")), float(oc["price"]))
+                            (title, float(oc["price"]))
                         )
             # 足球 1X2 需要三个结果都有报价，否则会误判套利
             if len(prices) < 3:
@@ -161,22 +176,29 @@ class OddsApiSource:
         if self.sport_key:
             return self.sport_key
         # /sports 列表请求不消耗配额
-        resp = requests.get(
-            f"{ODDS_API_BASE}/sports",
-            params={"apiKey": api_key, "all": "false"},
-            timeout=25,
-        )
-        resp.raise_for_status()
+        try:
+            resp = requests.get(
+                f"{ODDS_API_BASE}/sports",
+                params={"apiKey": api_key, "all": "false"},
+                timeout=25,
+            )
+        except requests.RequestException as e:
+            raise RuntimeError(f"网络请求失败（{type(e).__name__}）") from None
+        if resp.status_code >= 400:
+            raise RuntimeError(f"赛事列表请求失败（HTTP {resp.status_code}）")
         candidates = [
             s["key"] for s in resp.json()
-            if "world_cup" in s["key"] and s["key"].startswith("soccer")
+            if s["key"].startswith("soccer") and "world_cup" in s["key"]
+            and s["key"] not in self.excluded
+            and not any(x in s["key"] for x in ("winner", "qualifier"))
         ]
         if not candidates:
             raise RuntimeError(
-                "在 The Odds API 中未找到进行中的世界杯赛事，"
-                "可在设置中手动指定 sport_key"
+                "在 The Odds API 中未找到进行中的世界杯单场赛事，"
+                "可在 config.json 中手动指定 sport_key"
             )
-        self.sport_key = sorted(candidates)[-1]
+        # 单场比赛盘的 key 最短；冠军盘等衍生市场 key 带后缀
+        self.sport_key = sorted(candidates, key=len)[0]
         return self.sport_key
 
 
