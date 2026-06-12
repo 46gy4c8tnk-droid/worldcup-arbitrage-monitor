@@ -1,0 +1,8 @@
+# 运行时数据（含模拟账户记录）
+arb.db
+
+# 运行时配置（live 模式下含 API key，勿提交）
+config.json
+
+__pycache__/
+*.pyc

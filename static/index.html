@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>世界杯套利监控 · 模拟账户</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --green: #3fb950; --red: #f85149; --blue: #58a6ff; --amber: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text);
+         font-family: "Segoe UI", "Microsoft YaHei", sans-serif; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+           gap: 10px; margin-bottom: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border);
+          border-radius: 8px; padding: 12px; }
+  .card .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .card .value { font-size: 20px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .panel h2 { font-size: 14px; margin-bottom: 10px; color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { color: var(--muted); text-align: left; font-weight: 500;
+       padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 5px 8px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 10px;
+         font-size: 11px; border: 1px solid var(--border); }
+  .tag.ok { color: var(--green); border-color: var(--green); }
+  .tag.warn { color: var(--amber); border-color: var(--amber); }
+  .tag.info { color: var(--blue); border-color: var(--blue); }
+  .legs { color: var(--muted); font-size: 11.5px; line-height: 1.6; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  label { font-size: 12px; color: var(--muted); }
+  input, select { background: #0d1117; color: var(--text); border: 1px solid var(--border);
+                  border-radius: 6px; padding: 5px 8px; font-size: 12.5px; }
+  input[type=number] { width: 90px; }
+  button { background: #21262d; color: var(--text); border: 1px solid var(--border);
+           border-radius: 6px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; }
+  button:hover { background: #30363d; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.danger { color: var(--red); border-color: var(--red); }
+  #chartWrap { height: 260px; }
+  .logline { font-size: 11.5px; color: var(--muted); padding: 2px 0;
+             border-bottom: 1px dashed #21262d; }
+  .logline b { color: var(--text); font-weight: 500; }
+  .empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
+  .err { color: var(--red); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>⚽ 世界杯跨平台套利监控 <span id="modeTag" class="tag info"></span></h1>
+<div class="sub">澳洲博彩商赔率对比 · 模拟账户自动下单 · 数据仅供学习研究</div>
+
+<div class="cards">
+  <div class="card"><div class="label">账户净值 (AUD)</div><div class="value" id="equity">–</div></div>
+  <div class="card"><div class="label">可用余额 (AUD)</div><div class="value" id="balance">–</div></div>
+  <div class="card"><div class="label">累计收益率</div><div class="value" id="returnPct">–</div></div>
+  <div class="card"><div class="label">已结算 / 持仓中</div><div class="value" id="counts">–</div></div>
+  <div class="card"><div class="label">累计利润 (AUD)</div><div class="value" id="totalProfit">–</div></div>
+  <div class="card"><div class="label">归零重置次数</div><div class="value" id="resets">–</div></div>
+  <div class="card"><div class="label">API 剩余配额</div><div class="value" id="quota">–</div></div>
+</div>
+
+<div class="grid">
+<div>
+  <div class="panel">
+    <h2>收益率曲线（净值 = 余额 + 持仓锁定赔付）</h2>
+    <div id="chartWrap"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h2>实时套利机会</h2>
+    <div id="oppsWrap"></div>
+  </div>
+
+  <div class="panel">
+    <h2>持仓中（开赛后自动结算）</h2>
+    <div id="openWrap"></div>
+  </div>
+
+  <div class="panel">
+    <h2>下单历史</h2>
+    <div id="histWrap"></div>
+  </div>
+</div>
+
+<div>
+  <div class="panel">
+    <h2>设置</h2>
+    <div class="row">
+      <label>数据模式</label>
+      <select id="cfgMode">
+        <option value="demo">demo · 本地模拟行情</option>
+        <option value="live">live · The Odds API 真实赔率</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>API Key</label>
+      <input id="cfgKey" type="password" placeholder="the-odds-api.com 获取" style="flex:1">
+    </div>
+    <div class="row">
+      <label>真实轮询间隔(秒)</label><input id="cfgLiveInt" type="number" min="60">
+      <label>模拟间隔(秒)</label><input id="cfgDemoInt" type="number" min="5">
+    </div>
+    <div class="row">
+      <label>最低利润率(%)</label><input id="cfgMinProfit" type="number" step="0.1">
+      <label>单组投入比例</label><input id="cfgFraction" type="number" step="0.01" min="0.01" max="1">
+    </div>
+    <div class="row">
+      <label>单组上限(AUD)</label><input id="cfgMaxStake" type="number" step="100">
+      <label>自动下单</label>
+      <select id="cfgAutoBet"><option value="1">开启</option><option value="0">关闭</option></select>
+    </div>
+    <div class="row">
+      <button class="primary" onclick="saveConfig()">保存设置</button>
+      <button onclick="pollNow()">立即抓取一次</button>
+      <button class="danger" onclick="resetAccount()">重置账户</button>
+    </div>
+    <div class="sub" id="pollInfo"></div>
+    <div class="err" id="lastError"></div>
+  </div>
+
+  <div class="panel">
+    <h2>抓取频率说明</h2>
+    <div class="sub" style="line-height:1.8">
+      live 模式使用 The Odds API（合法聚合澳洲博彩商赔率），<b style="color:var(--text)">1 次轮询 = 1 个配额积分</b>。
+      免费档 500 积分/月：<br>
+      · 间隔 2 小时 ≈ 360 次/月 ✓ 安全<br>
+      · 间隔 90 分钟 ≈ 480 次/月 ⚠ 接近上限<br>
+      · 间隔 30 分钟 ≈ 1440 次/月 ✗ 超额<br>
+      系统遇到 429 限流会自动指数退避。请勿直接爬取博彩网站页面
+      （违反其服务条款且有 IP 封禁风险）。
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>事件日志</h2>
+    <div id="logsWrap"></div>
+  </div>
+</div>
+</div>
+
+<script>
+let chart = null;
+
+function fmt(n, d = 2) { return Number(n).toLocaleString("en-AU", {minimumFractionDigits: d, maximumFractionDigits: d}); }
+function ts2str(ts) { return ts ? new Date(ts * 1000).toLocaleString("zh-CN", {hour12: false}) : "–"; }
+function ts2time(ts) { return ts ? new Date(ts * 1000).toLocaleTimeString("zh-CN", {hour12: false}) : "–"; }
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); }
+  catch (e) { document.getElementById("lastError").textContent = "无法连接后端：" + e; return; }
+
+  document.getElementById("modeTag").textContent = s.config.mode === "live" ? "LIVE 真实赔率" : "DEMO 模拟行情";
+  document.getElementById("equity").textContent = fmt(s.equity);
+  document.getElementById("balance").textContent = fmt(s.balance);
+  const rp = document.getElementById("returnPct");
+  rp.textContent = (s.return_pct >= 0 ? "+" : "") + fmt(s.return_pct, 2) + "%";
+  rp.className = "value " + (s.return_pct >= 0 ? "pos" : "neg");
+  document.getElementById("counts").textContent = s.stats.settled_count + " / " + s.stats.open_count;
+  const tp = document.getElementById("totalProfit");
+  tp.textContent = (s.stats.total_profit >= 0 ? "+" : "") + fmt(s.stats.total_profit);
+  tp.className = "value " + (s.stats.total_profit >= 0 ? "pos" : "neg");
+  document.getElementById("resets").textContent = s.resets;
+  document.getElementById("quota").textContent = s.quota ? (s.quota.remaining ?? "?") : (s.config.mode === "demo" ? "不消耗" : "–");
+
+  drawChart(s.equity_curve);
+  renderOpps(s.opportunities);
+  renderGroups("openWrap", s.open_groups, false);
+  renderGroups("histWrap", s.history, true);
+  renderLogs(s.logs);
+  fillConfig(s.config);
+
+  const next = Math.max(0, Math.round(s.next_poll_at - s.now));
+  document.getElementById("pollInfo").textContent =
+    "上次抓取：" + ts2str(s.last_poll_ts) + " · 下次抓取：" + next + " 秒后";
+  document.getElementById("lastError").textContent = s.last_error ? "⚠ " + s.last_error : "";
+}
+
+function drawChart(curve) {
+  const labels = curve.map(p => ts2time(p.ts));
+  const data = curve.map(p => p.equity);
+  if (!chart) {
+    chart = new Chart(document.getElementById("chart"), {
+      type: "line",
+      data: { labels, datasets: [{
+        label: "净值 (AUD)", data, borderColor: "#3fb950",
+        backgroundColor: "rgba(63,185,80,0.08)", fill: true,
+        tension: 0.25, pointRadius: 0, borderWidth: 2,
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { labels: { color: "#8b949e" } },
+          tooltip: { callbacks: { afterLabel: ctx => {
+            const p = curve[ctx.dataIndex];
+            return "余额 " + fmt(p.balance) + " · " + (p.note || "");
+          }}}},
+        scales: {
+          x: { ticks: { color: "#8b949e", maxTicksLimit: 10 }, grid: { color: "#21262d" } },
+          y: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+        },
+      },
+    });
+  } else {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.options.plugins.tooltip.callbacks.afterLabel = ctx => {
+      const p = curve[ctx.dataIndex];
+      return "余额 " + fmt(p.balance) + " · " + (p.note || "");
+    };
+    chart.update("none");
+  }
+}
+
+function renderOpps(opps) {
+  const el = document.getElementById("oppsWrap");
+  if (!opps.length) { el.innerHTML = '<div class="empty">当前行情未发现套利空间（sum(1/最优赔率) ≥ 1）</div>'; return; }
+  let html = '<table><tr><th>比赛</th><th>开赛</th><th>最优组合</th><th>利润率</th><th>状态</th></tr>';
+  for (const o of opps) {
+    const legs = o.legs.map(l => esc(l.outcome) + " @" + l.odds + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
+    const cls = o.status === "已下单" || o.status === "已持仓" ? "ok" : "warn";
+    html += `<tr><td>${esc(o.match_name)}</td><td>${ts2time(o.commence_ts)}</td>
+      <td class="legs">${legs}</td>
+      <td class="pos">+${o.profit_pct.toFixed(2)}%</td>
+      <td><span class="tag ${cls}">${esc(o.status)}</span></td></tr>`;
+  }
+  el.innerHTML = html + "</table>";
+}
+
+function renderGroups(id, groups, isHistory) {
+  const el = document.getElementById(id);
+  if (!groups.length) { el.innerHTML = '<div class="empty">暂无记录</div>'; return; }
+  let html = '<table><tr><th>' + (isHistory ? "结算时间" : "下单时间") +
+    '</th><th>比赛</th><th>各腿明细</th><th>投入</th><th>利润</th><th>状态</th></tr>';
+  for (const g of groups) {
+    const legs = g.legs.map(l =>
+      esc(l.outcome) + " @" + l.odds + " × $" + fmt(l.stake) + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
+    const st = g.status === "settled" ? '<span class="tag ok">已结算</span>'
+             : g.status === "voided" ? '<span class="tag warn">已作废</span>'
+             : '<span class="tag info">待开赛</span>';
+    const profitCell = g.status === "voided" ? "–"
+      : `<span class="${g.profit >= 0 ? "pos" : "neg"}">${g.profit >= 0 ? "+" : ""}${fmt(g.profit)}</span>`;
+    html += `<tr><td>${ts2str(isHistory ? (g.settled_at || g.placed_at) : g.placed_at)}</td>
+      <td>${esc(g.match_name)}<br><i class="legs">套利 ${g.profit_pct.toFixed(2)}% · 开赛 ${ts2time(g.commence_ts)}</i></td>
+      <td class="legs">${legs}</td><td>$${fmt(g.total_stake)}</td>
+      <td>${profitCell}</td><td>${st}</td></tr>`;
+  }
+  el.innerHTML = html + "</table>";
+}
+
+function renderLogs(logs) {
+  document.getElementById("logsWrap").innerHTML = logs.map(l =>
+    `<div class="logline"><b>${ts2time(l.ts)}</b> ${esc(l.message)}</div>`).join("")
+    || '<div class="empty">暂无日志</div>';
+}
+
+let configDirty = false;
+["cfgMode","cfgKey","cfgLiveInt","cfgDemoInt","cfgMinProfit","cfgFraction","cfgMaxStake","cfgAutoBet"]
+  .forEach(id => document.getElementById(id).addEventListener("input", () => configDirty = true));
+
+function fillConfig(cfg) {
+  if (configDirty) return;   // 用户正在编辑时不覆盖
+  document.getElementById("cfgMode").value = cfg.mode;
+  const keyEl = document.getElementById("cfgKey");
+  if (document.activeElement !== keyEl) keyEl.placeholder = cfg.odds_api_key_set ? "已设置 " + cfg.odds_api_key : "the-odds-api.com 获取";
+  document.getElementById("cfgLiveInt").value = cfg.poll_interval_live;
+  document.getElementById("cfgDemoInt").value = cfg.poll_interval_demo;
+  document.getElementById("cfgMinProfit").value = cfg.min_profit_pct;
+  document.getElementById("cfgFraction").value = cfg.stake_fraction;
+  document.getElementById("cfgMaxStake").value = cfg.max_stake;
+  document.getElementById("cfgAutoBet").value = cfg.auto_bet ? "1" : "0";
+}
+
+async function saveConfig() {
+  const body = {
+    mode: document.getElementById("cfgMode").value,
+    poll_interval_live: +document.getElementById("cfgLiveInt").value,
+    poll_interval_demo: +document.getElementById("cfgDemoInt").value,
+    min_profit_pct: +document.getElementById("cfgMinProfit").value,
+    stake_fraction: +document.getElementById("cfgFraction").value,
+    max_stake: +document.getElementById("cfgMaxStake").value,
+    auto_bet: document.getElementById("cfgAutoBet").value === "1",
+  };
+  const key = document.getElementById("cfgKey").value.trim();
+  if (key) body.odds_api_key = key;
+  await fetch("/api/config", {method: "POST", headers: {"Content-Type": "application/json"},
+                              body: JSON.stringify(body)});
+  document.getElementById("cfgKey").value = "";
+  configDirty = false;
+  refresh();
+}
+
+async function pollNow() {
+  await fetch("/api/poll", {method: "POST"});
+  setTimeout(refresh, 1500);
+}
+
+async function resetAccount() {
+  if (!confirm("确定重置账户？余额将恢复为初始资金，未结算持仓将作废。")) return;
+  await fetch("/api/reset", {method: "POST"});
+  refresh();
+}
+
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
