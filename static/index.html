@@ -54,11 +54,49 @@
   .logline b { color: var(--text); font-weight: 500; }
   .empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
   .err { color: var(--red); font-size: 12px; margin-top: 6px; }
+  .statusbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+               background: var(--panel); border: 1px solid var(--border);
+               border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; font-size: 12.5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+         display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .statusbar b { color: var(--text); }
+  .countdown { color: var(--blue); font-variant-numeric: tabular-nums; }
+  .btn-help { padding: 3px 10px; font-size: 11.5px; }
+  /* 下单助手弹窗 */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+              display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-bg.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 10px; padding: 18px; width: 520px; max-width: 94vw;
+           max-height: 90vh; overflow-y: auto; }
+  .modal h3 { font-size: 15px; margin-bottom: 4px; }
+  .modal .close { float: right; cursor: pointer; color: var(--muted); font-size: 18px; }
+  .leg-card { border: 1px solid var(--border); border-radius: 8px;
+              padding: 10px; margin: 8px 0; }
+  .leg-card .top { display: flex; justify-content: space-between; align-items: center; }
+  .leg-card .stake-line { font-size: 18px; font-weight: 600; color: var(--amber); margin-top: 4px; }
+  .leg-card a { color: var(--blue); text-decoration: none; font-size: 12px; }
+  .leg-card a:hover { text-decoration: underline; }
+  .copybtn { background: #21262d; border: 1px solid var(--border); color: var(--text);
+             border-radius: 5px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: 6px; }
+  .summary-box { background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+                 padding: 10px; margin: 10px 0; font-size: 13px; line-height: 1.9; }
 </style>
 </head>
 <body>
 <h1>⚽ 世界杯跨平台套利监控 <span id="modeTag" class="tag info"></span></h1>
 <div class="sub">澳洲博彩商赔率对比 · 模拟账户自动下单 · 数据仅供学习研究</div>
+
+<div class="statusbar">
+  <span><span class="dot" id="liveDot"></span><b id="stRunning">运行中</b></span>
+  <span>上次抓取：<b id="stLast">–</b></span>
+  <span>下次抓取：<span class="countdown" id="stCountdown">–</span></span>
+  <span>监控比赛：<b id="stMatches">–</b> 场</span>
+  <span style="margin-left:auto">
+    <label style="font-size:12px"><input type="checkbox" id="notifyToggle"> 发现机会时桌面提醒</label>
+  </span>
+</div>
 
 <div class="cards">
   <div class="card"><div class="label">账户净值 (AUD)</div><div class="value" id="equity">–</div></div>
@@ -78,8 +116,13 @@
   </div>
 
   <div class="panel">
-    <h2>实时套利机会</h2>
+    <h2>实时套利机会 <span class="sub" style="font-weight:400">· 点「下单助手」算注金/记账</span></h2>
     <div id="oppsWrap"></div>
+  </div>
+
+  <div class="panel">
+    <h2>市场总览 <span class="sub" style="font-weight:400">· 全部比赛离套利有多近（每次抓取刷新）</span></h2>
+    <div id="marketWrap"></div>
   </div>
 
   <div class="panel">
@@ -149,8 +192,35 @@
 </div>
 </div>
 
+<div class="modal-bg" id="betModal">
+  <div class="modal">
+    <span class="close" onclick="closeBetHelper()">✕</span>
+    <h3 id="bmTitle">下单助手</h3>
+    <div class="sub" id="bmSub"></div>
+    <div class="row" style="margin-top:10px">
+      <label>计划总投入 (AUD)</label>
+      <input id="bmTotal" type="number" value="1000" min="10" step="50" oninput="recalcHelper()">
+      <span class="sub" id="bmBalance"></span>
+    </div>
+    <div id="bmLegs"></div>
+    <div class="summary-box" id="bmSummary"></div>
+    <div class="sub" style="line-height:1.7">
+      操作顺序：① 按下方金额到各家网站分别下注 → ② 全部下完后点「记入模拟账户」。
+      记账只影响模拟账户，不会真实下注；金额会从模拟余额扣除，开赛后自动按锁定赔付结算。
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="recordManualBet()">记入模拟账户</button>
+      <button onclick="closeBetHelper()">取消</button>
+      <span class="err" id="bmError"></span>
+    </div>
+  </div>
+</div>
+
 <script>
 let chart = null;
+let lastArbKeys = new Set();   // 用于桌面提醒去重
+let helperState = null;        // 当前下单助手对应的比赛
+let latest = null;             // 最近一次 /api/state 快照
 
 function fmt(n, d = 2) { return Number(n).toLocaleString("en-AU", {minimumFractionDigits: d, maximumFractionDigits: d}); }
 function ts2str(ts) { return ts ? new Date(ts * 1000).toLocaleString("zh-CN", {hour12: false}) : "–"; }
@@ -161,6 +231,8 @@ async function refresh() {
   let s;
   try { s = await (await fetch("/api/state")).json(); }
   catch (e) { document.getElementById("lastError").textContent = "无法连接后端：" + e; return; }
+  s._fetchedAt = Date.now();
+  latest = s;
 
   document.getElementById("modeTag").textContent = s.config.mode === "live" ? "LIVE 真实赔率" : "DEMO 模拟行情";
   document.getElementById("equity").textContent = fmt(s.equity);
@@ -177,15 +249,30 @@ async function refresh() {
 
   drawChart(s.equity_curve);
   renderOpps(s.opportunities);
+  renderMarket(s.market_view || []);
   renderGroups("openWrap", s.open_groups, false);
   renderGroups("histWrap", s.history, true);
   renderLogs(s.logs);
   fillConfig(s.config);
 
-  const next = Math.max(0, Math.round(s.next_poll_at - s.now));
+  // 状态栏
+  document.getElementById("stLast").textContent = s.last_poll_ts ? ts2str(s.last_poll_ts) : "尚未抓取";
+  document.getElementById("stMatches").textContent = (s.market_view || []).length;
+  const dot = document.getElementById("liveDot");
+  dot.style.background = s.last_error ? "var(--red)" : "var(--green)";
+  document.getElementById("stRunning").textContent = s.last_error ? "抓取异常" : "运行中";
+
   document.getElementById("pollInfo").textContent =
-    "上次抓取：" + ts2str(s.last_poll_ts) + " · 下次抓取：" + next + " 秒后";
+    "上次抓取：" + ts2str(s.last_poll_ts) + " · 下次抓取：" + Math.max(0, Math.round(s.next_poll_at - s.now)) + " 秒后";
   document.getElementById("lastError").textContent = s.last_error ? "⚠ " + s.last_error : "";
+
+  // 若下单助手开着，用最新赔率刷新它
+  if (helperState && document.getElementById("betModal").classList.contains("show")) {
+    const fresh = (s.market_view || []).find(m => m.event_id === helperState.event_id);
+    if (fresh) { helperState = {...fresh, balance: s.balance, links: s.bookmaker_links}; recalcHelper(); }
+  }
+
+  maybeNotify(s.opportunities);
 }
 
 function drawChart(curve) {
@@ -226,15 +313,32 @@ function drawChart(curve) {
 
 function renderOpps(opps) {
   const el = document.getElementById("oppsWrap");
-  if (!opps.length) { el.innerHTML = '<div class="empty">当前行情未发现套利空间（sum(1/最优赔率) ≥ 1）</div>'; return; }
-  let html = '<table><tr><th>比赛</th><th>开赛</th><th>最优组合</th><th>利润率</th><th>状态</th></tr>';
+  if (!opps.length) { el.innerHTML = '<div class="empty">当前行情未发现套利空间（真实大赛盘口效率高，机会稀少且短暂；可看下方「市场总览」了解离套利有多近）</div>'; return; }
+  let html = '<table><tr><th>比赛</th><th>开赛</th><th>最优组合</th><th>利润率</th><th>状态</th><th></th></tr>';
   for (const o of opps) {
     const legs = o.legs.map(l => esc(l.outcome) + " @" + l.odds + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
     const cls = o.status === "已下单" || o.status === "已持仓" ? "ok" : "warn";
     html += `<tr><td>${esc(o.match_name)}</td><td>${ts2time(o.commence_ts)}</td>
       <td class="legs">${legs}</td>
       <td class="pos">+${o.profit_pct.toFixed(2)}%</td>
-      <td><span class="tag ${cls}">${esc(o.status)}</span></td></tr>`;
+      <td><span class="tag ${cls}">${esc(o.status)}</span></td>
+      <td><button class="btn-help" onclick="openBetHelper('${o.event_id}')">下单助手</button></td></tr>`;
+  }
+  el.innerHTML = html + "</table>";
+}
+
+function renderMarket(market) {
+  const el = document.getElementById("marketWrap");
+  if (!market.length) { el.innerHTML = '<div class="empty">暂无行情，点「立即抓取一次」或等待下次轮询</div>'; return; }
+  let html = '<table><tr><th>比赛</th><th>开赛</th><th>各结果最优赔率</th><th>套利率</th><th></th></tr>';
+  for (const m of market.slice(0, 25)) {
+    const legs = m.legs.map(l => esc(l.outcome) + " @" + l.odds + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
+    const cls = m.profit_pct >= 0 ? "pos" : "neg";
+    const sign = m.profit_pct >= 0 ? "+" : "";
+    html += `<tr><td>${esc(m.match_name)}</td><td>${ts2time(m.commence_ts)}</td>
+      <td class="legs">${legs}</td>
+      <td class="${cls}">${sign}${m.profit_pct.toFixed(2)}%</td>
+      <td><button class="btn-help" onclick="openBetHelper('${m.event_id}')">下单助手</button></td></tr>`;
   }
   el.innerHTML = html + "</table>";
 }
@@ -252,8 +356,9 @@ function renderGroups(id, groups, isHistory) {
              : '<span class="tag info">待开赛</span>';
     const profitCell = g.status === "voided" ? "–"
       : `<span class="${g.profit >= 0 ? "pos" : "neg"}">${g.profit >= 0 ? "+" : ""}${fmt(g.profit)}</span>`;
+    const src = g.source === "manual" ? '<span class="tag info" style="font-size:10px">手动</span> ' : "";
     html += `<tr><td>${ts2str(isHistory ? (g.settled_at || g.placed_at) : g.placed_at)}</td>
-      <td>${esc(g.match_name)}<br><i class="legs">套利 ${g.profit_pct.toFixed(2)}% · 开赛 ${ts2time(g.commence_ts)}</i></td>
+      <td>${src}${esc(g.match_name)}<br><i class="legs">套利 ${g.profit_pct.toFixed(2)}% · 开赛 ${ts2time(g.commence_ts)}</i></td>
       <td class="legs">${legs}</td><td>$${fmt(g.total_stake)}</td>
       <td>${profitCell}</td><td>${st}</td></tr>`;
   }
@@ -312,6 +417,111 @@ async function resetAccount() {
   await fetch("/api/reset", {method: "POST"});
   refresh();
 }
+
+// ---------- 下单助手 ----------
+function bookieLink(name) {
+  if (!latest || !latest.bookmaker_links) return null;
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const k in latest.bookmaker_links) {
+    if (key.includes(k)) return latest.bookmaker_links[k];
+  }
+  return null;
+}
+
+function openBetHelper(eventId) {
+  if (!latest) return;
+  const m = (latest.market_view || []).find(x => x.event_id === eventId);
+  if (!m) { alert("该比赛已不在当前行情中，请先抓取最新赔率"); return; }
+  helperState = {...m, balance: latest.balance, links: latest.bookmaker_links};
+  document.getElementById("bmTitle").textContent = "下单助手 · " + m.match_name;
+  document.getElementById("bmSub").textContent =
+    "开赛 " + ts2str(m.commence_ts) + " · 套利率 " + (m.profit_pct >= 0 ? "+" : "") + m.profit_pct.toFixed(2) + "%";
+  document.getElementById("bmBalance").textContent = "模拟可用余额 " + fmt(latest.balance);
+  document.getElementById("bmError").textContent = "";
+  document.getElementById("betModal").classList.add("show");
+  recalcHelper();
+}
+
+function recalcHelper() {
+  if (!helperState) return;
+  const total = +document.getElementById("bmTotal").value || 0;
+  const inv = helperState.legs.reduce((a, l) => a + 1 / l.odds, 0);
+  let html = "";
+  let payouts = [];
+  for (const l of helperState.legs) {
+    const stake = total * (1 / l.odds) / inv;
+    const payout = stake * l.odds;
+    payouts.push(payout);
+    const link = bookieLink(l.bookmaker);
+    const linkHtml = link ? `<a href="${link}" target="_blank">前往 ${esc(l.bookmaker)} ↗</a>` : esc(l.bookmaker);
+    html += `<div class="leg-card">
+      <div class="top"><b>${esc(l.outcome)}</b> <span class="sub">@ ${l.odds} · ${linkHtml}</span></div>
+      <div class="stake-line">下注 $${fmt(stake)}
+        <button class="copybtn" onclick="navigator.clipboard.writeText('${stake.toFixed(2)}')">复制金额</button></div>
+      <div class="sub">若此结果发生，回收 $${fmt(payout)}</div>
+    </div>`;
+  }
+  document.getElementById("bmLegs").innerHTML = html;
+  const minPayout = Math.min(...payouts);
+  const profit = minPayout - total;
+  const profitPct = total > 0 ? (profit / total * 100) : 0;
+  const cls = profit >= 0 ? "pos" : "neg";
+  document.getElementById("bmSummary").innerHTML =
+    `总投入 <b>$${fmt(total)}</b> · 保底回收 <b>$${fmt(minPayout)}</b> · ` +
+    `保底盈亏 <b class="${cls}">${profit >= 0 ? "+" : ""}${fmt(profit)}（${profitPct >= 0 ? "+" : ""}${profitPct.toFixed(2)}%）</b>` +
+    (profit < 0 ? '<br><span class="neg">⚠ 当前为非套利价，三个结果都不亏需要正套利率；此单为模拟练习</span>' : "");
+}
+
+async function recordManualBet() {
+  if (!helperState) return;
+  const total = +document.getElementById("bmTotal").value || 0;
+  const r = await (await fetch("/api/manual_bet", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({event_id: helperState.event_id, total_stake: total}),
+  })).json();
+  if (r.ok) { closeBetHelper(); refresh(); }
+  else document.getElementById("bmError").textContent = "✕ " + (r.error || "记账失败");
+}
+
+function closeBetHelper() {
+  helperState = null;
+  document.getElementById("betModal").classList.remove("show");
+}
+document.getElementById("betModal").addEventListener("click", e => {
+  if (e.target.id === "betModal") closeBetHelper();
+});
+
+// ---------- 桌面提醒 ----------
+document.getElementById("notifyToggle").addEventListener("change", e => {
+  if (e.target.checked && "Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+});
+
+function maybeNotify(opps) {
+  const keys = new Set(opps.map(o => o.event_id));
+  const toggle = document.getElementById("notifyToggle");
+  if (toggle.checked && "Notification" in window && Notification.permission === "granted") {
+    for (const o of opps) {
+      if (!lastArbKeys.has(o.event_id)) {
+        new Notification("发现套利机会 +" + o.profit_pct.toFixed(2) + "%", {
+          body: o.match_name + "\n" + o.legs.map(l => l.outcome + " @" + l.odds + " (" + l.bookmaker + ")").join("\n"),
+        });
+      }
+    }
+  }
+  lastArbKeys = keys;
+}
+
+// ---------- 客户端每秒倒计时（让页面显得"活着"）----------
+setInterval(() => {
+  if (!latest || !latest.next_poll_at) return;
+  const elapsed = (Date.now() - (latest._fetchedAt || Date.now())) / 1000;
+  const remain = Math.max(0, latest.next_poll_at - latest.now - elapsed);
+  const mm = String(Math.floor(remain / 60)).padStart(2, "0");
+  const ss = String(Math.floor(remain % 60)).padStart(2, "0");
+  document.getElementById("stCountdown").textContent = mm + ":" + ss;
+}, 1000);
 
 refresh();
 setInterval(refresh, 4000);

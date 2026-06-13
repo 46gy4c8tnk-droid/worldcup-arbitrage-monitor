@@ -38,6 +38,13 @@ def reset():
     return jsonify({"ok": True})
 
 
+@app.post("/api/manual_bet")
+def manual_bet():
+    data = request.get_json(force=True)
+    return jsonify(engine.record_manual_bet(
+        data.get("event_id"), data.get("total_stake", 0)))
+
+
 if __name__ == "__main__":
     import os
     engine.start()
