@@ -66,6 +66,7 @@ class Engine:
         self.next_poll_at = 0       # 立即开始第一轮
         self.force_flag = False
         self.backoff = 1
+        self.net_retries = 0
 
     # ---------- 配置 ----------
 
@@ -224,15 +225,29 @@ class Engine:
             events, quota = source.get_events(cfg)
         except Exception as e:
             with self.lock:
-                self.last_error = str(e)
-                # 真实模式出错时指数退避，避免连续打 API
-                self.backoff = min(self.backoff * 2, 8) if mode == "live" else 1
-                self.next_poll_at = time.time() + self._interval() * self.backoff
-                self._log("error", f"行情获取失败：{e}")
+                msg = str(e)
+                self.last_error = msg
+                now = time.time()
+                interval = self._interval()
+                if mode != "live":
+                    self.next_poll_at = now + interval
+                elif "429" in msg or "频繁" in msg:
+                    # 限流：指数退避，避免继续打爆配额
+                    self.backoff = min(self.backoff * 2, 8)
+                    self.next_poll_at = now + interval * self.backoff
+                elif "网络" in msg or "ConnectionError" in msg or "Timeout" in msg:
+                    # 瞬时网络抖动：60s 起快速重试，最多到正常间隔，不拉长到几小时
+                    self.net_retries = min(self.net_retries + 1, 5)
+                    self.next_poll_at = now + min(60 * self.net_retries, interval)
+                else:
+                    # 配置类错误（401/422 等）：按正常间隔，重试也需先修正配置
+                    self.next_poll_at = now + interval
+                self._log("error", f"行情获取失败：{msg}")
             return
 
         with self.lock:
             self.backoff = 1
+            self.net_retries = 0
             self.last_error = None
             self.last_poll_ts = time.time()
             self.next_poll_at = self.last_poll_ts + self._interval()
