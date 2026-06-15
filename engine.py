@@ -13,7 +13,7 @@ DB_PATH = os.path.join(BASE, "arb.db")
 CONFIG_PATH = os.path.join(BASE, "config.json")
 
 DEFAULT_CONFIG = {
-    "mode": "demo",                # demo: 本地模拟行情 / live: The Odds API 真实赔率
+    "mode": "live",                # 固定使用 The Odds API 真实赔率（UI 已移除 demo 切换）
     "odds_api_key": "",
     "sport_key": "auto",           # auto = 自动查找世界杯赛事 key
     "region": "au",                # 澳洲博彩商

@@ -121,13 +121,13 @@
   </div>
 
   <div class="panel">
-    <h2>市场总览 <span class="sub" style="font-weight:400">· 全部比赛离套利有多近（每次抓取刷新）</span></h2>
-    <div id="marketWrap"></div>
+    <h2>持仓中（开赛后自动结算）</h2>
+    <div id="openWrap"></div>
   </div>
 
   <div class="panel">
-    <h2>持仓中（开赛后自动结算）</h2>
-    <div id="openWrap"></div>
+    <h2>市场总览 <span class="sub" style="font-weight:400">· 全部比赛离套利有多近（每次抓取刷新）</span></h2>
+    <div id="marketWrap"></div>
   </div>
 
   <div class="panel">
@@ -140,19 +140,11 @@
   <div class="panel">
     <h2>设置</h2>
     <div class="row">
-      <label>数据模式</label>
-      <select id="cfgMode">
-        <option value="demo">demo · 本地模拟行情</option>
-        <option value="live">live · The Odds API 真实赔率</option>
-      </select>
-    </div>
-    <div class="row">
       <label>API Key</label>
       <input id="cfgKey" type="password" placeholder="the-odds-api.com 获取" style="flex:1">
     </div>
     <div class="row">
-      <label>真实轮询间隔(秒)</label><input id="cfgLiveInt" type="number" min="60">
-      <label>模拟间隔(秒)</label><input id="cfgDemoInt" type="number" min="5">
+      <label>轮询间隔(秒)</label><input id="cfgLiveInt" type="number" min="60">
     </div>
     <div class="row">
       <label>最低利润率(%)</label><input id="cfgMinProfit" type="number" step="0.1">
@@ -234,7 +226,7 @@ async function refresh() {
   s._fetchedAt = Date.now();
   latest = s;
 
-  document.getElementById("modeTag").textContent = s.config.mode === "live" ? "LIVE 真实赔率" : "DEMO 模拟行情";
+  document.getElementById("modeTag").textContent = "LIVE 真实赔率";
   document.getElementById("equity").textContent = fmt(s.equity);
   document.getElementById("balance").textContent = fmt(s.balance);
   const rp = document.getElementById("returnPct");
@@ -372,16 +364,14 @@ function renderLogs(logs) {
 }
 
 let configDirty = false;
-["cfgMode","cfgKey","cfgLiveInt","cfgDemoInt","cfgMinProfit","cfgFraction","cfgMaxStake","cfgAutoBet"]
+["cfgKey","cfgLiveInt","cfgMinProfit","cfgFraction","cfgMaxStake","cfgAutoBet"]
   .forEach(id => document.getElementById(id).addEventListener("input", () => configDirty = true));
 
 function fillConfig(cfg) {
   if (configDirty) return;   // 用户正在编辑时不覆盖
-  document.getElementById("cfgMode").value = cfg.mode;
   const keyEl = document.getElementById("cfgKey");
   if (document.activeElement !== keyEl) keyEl.placeholder = cfg.odds_api_key_set ? "已设置 " + cfg.odds_api_key : "the-odds-api.com 获取";
   document.getElementById("cfgLiveInt").value = cfg.poll_interval_live;
-  document.getElementById("cfgDemoInt").value = cfg.poll_interval_demo;
   document.getElementById("cfgMinProfit").value = cfg.min_profit_pct;
   document.getElementById("cfgFraction").value = cfg.stake_fraction;
   document.getElementById("cfgMaxStake").value = cfg.max_stake;
@@ -390,9 +380,7 @@ function fillConfig(cfg) {
 
 async function saveConfig() {
   const body = {
-    mode: document.getElementById("cfgMode").value,
     poll_interval_live: +document.getElementById("cfgLiveInt").value,
-    poll_interval_demo: +document.getElementById("cfgDemoInt").value,
     min_profit_pct: +document.getElementById("cfgMinProfit").value,
     stake_fraction: +document.getElementById("cfgFraction").value,
     max_stake: +document.getElementById("cfgMaxStake").value,
