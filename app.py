@@ -1,7 +1,7 @@
-"""世界杯跨平台套利监控 - 启动入口。
+"""World Cup cross-bookmaker arbitrage monitor - entry point.
 
-运行: python app.py
-访问: http://127.0.0.1:8788
+Run:  python app.py
+Open: http://127.0.0.1:8788
 """
 from flask import Flask, jsonify, request, send_from_directory
 

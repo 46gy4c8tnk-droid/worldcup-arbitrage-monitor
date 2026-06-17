@@ -1,10 +1,10 @@
-"""数据源：The Odds API（真实模式） / 本地模拟行情（演示模式）。
+"""Data sources: The Odds API (live) / local simulated odds (demo).
 
-两种数据源都返回统一结构的事件列表：
+Both sources return a unified list of events:
     {
         "event_id": str,
         "match_name": str,
-        "commence_ts": float,          # 开赛时间（epoch 秒）
+        "commence_ts": float,          # kickoff time (epoch seconds)
         "prices": { outcome: [(bookmaker, odds), ...] }
     }
 """
@@ -16,26 +16,26 @@ import requests
 
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 
-# 演示模式使用的澳洲主流博彩商
+# Australian bookmakers used by the demo source
 AU_BOOKIES = [
     "Sportsbet", "TAB", "Ladbrokes", "Neds",
     "PointsBet", "Unibet", "Betr", "PlayUp",
 ]
 
 DEMO_TEAMS = [
-    "阿根廷", "法国", "英格兰", "巴西", "西班牙", "德国", "葡萄牙", "荷兰",
-    "美国", "墨西哥", "加拿大", "日本", "韩国", "澳大利亚", "摩洛哥", "克罗地亚",
-    "乌拉圭", "哥伦比亚", "瑞士", "塞内加尔", "比利时", "意大利", "厄瓜多尔", "加纳",
+    "Argentina", "France", "England", "Brazil", "Spain", "Germany", "Portugal", "Netherlands",
+    "USA", "Mexico", "Canada", "Japan", "South Korea", "Australia", "Morocco", "Croatia",
+    "Uruguay", "Colombia", "Switzerland", "Senegal", "Belgium", "Italy", "Ecuador", "Ghana",
 ]
 
-DRAW = "平局"
+DRAW = "Draw"
 
 
 class DemoSource:
-    """本地生成接近真实的 1X2 赔率，不发出任何外部请求。
+    """Generate realistic 1X2 odds locally, without any external request.
 
-    每轮约有 15% 的概率在某场比赛中注入一个 0.5%~2.5% 的套利空间，
-    方便观察"发现机会 -> 自动下单 -> 结算"的完整流程。
+    Each round has ~15% chance of injecting a 0.5%-2.5% arbitrage gap into a
+    match, making it easy to watch the full "detect -> auto-bet -> settle" flow.
     """
 
     def __init__(self):
@@ -43,7 +43,7 @@ class DemoSource:
 
     def get_events(self, _config):
         now = time.time()
-        # 已开赛的比赛从行情中移除（引擎会在开赛时结算对应持仓）
+        # Drop matches that have kicked off (the engine settles their positions)
         self.events = {k: v for k, v in self.events.items() if v["commence_ts"] > now}
         while len(self.events) < 10:
             ev = self._new_event(now)
@@ -83,7 +83,7 @@ class DemoSource:
                 odds = fair / margin * random.uniform(0.985, 1.015)
                 prices[o].append((bookie, round(max(1.05, min(odds, 21.0)), 2)))
 
-        # 偶尔注入套利空间：抬高某一结果的最优赔率，使 sum(1/best) < 1
+        # Occasionally inject an arb: lift one outcome's best odds so sum(1/best) < 1
         if random.random() < 0.15:
             best_inv = sum(1 / max(v for _, v in offers) for offers in prices.values())
             target_inv = random.uniform(0.975, 0.995)
@@ -99,19 +99,19 @@ class DemoSource:
 
 
 class OddsApiSource:
-    """The Odds API 客户端。一次轮询 = 1 次请求 = 1 个配额积分。"""
+    """The Odds API client. One poll = one request = one quota credit."""
 
     def __init__(self):
         self.sport_key = None
-        self.excluded = set()   # 不支持 h2h 的赛事键（如冠军竞猜盘）
+        self.excluded = set()   # sport keys without an h2h market (e.g. outright winner)
 
     def get_events(self, config):
         api_key = config.get("odds_api_key", "").strip()
         if not api_key:
-            raise RuntimeError("未配置 The Odds API key（在设置面板填入）")
+            raise RuntimeError("The Odds API key not set (enter it in Settings)")
 
         sport = self._resolve_sport(config, api_key)
-        # 注意：错误信息绝不能带 URL/参数，否则 apiKey 会泄露到日志
+        # NOTE: error messages must never include the URL/params, or the apiKey leaks into logs
         try:
             resp = requests.get(
                 f"{ODDS_API_BASE}/sports/{sport}/odds",
@@ -124,21 +124,21 @@ class OddsApiSource:
                 timeout=25,
             )
         except requests.RequestException as e:
-            raise RuntimeError(f"网络请求失败（{type(e).__name__}）") from None
+            raise RuntimeError(f"Network request failed ({type(e).__name__})") from None
         quota = {
             "remaining": resp.headers.get("x-requests-remaining"),
             "used": resp.headers.get("x-requests-used"),
         }
         if resp.status_code == 401:
-            raise RuntimeError("API key 无效（401）")
+            raise RuntimeError("Invalid API key (401)")
         if resp.status_code == 429:
-            raise RuntimeError("请求过于频繁（429），已自动延长轮询间隔")
+            raise RuntimeError("Rate limited (429); polling slowed automatically")
         if resp.status_code == 422:
             self.excluded.add(sport)
             self.sport_key = None
-            raise RuntimeError(f"赛事 {sport} 不支持 h2h 市场，已排除并将自动重选")
+            raise RuntimeError(f"Event {sport} has no h2h market; excluded and will re-pick")
         if resp.status_code >= 400:
-            raise RuntimeError(f"The Odds API 返回 HTTP {resp.status_code}")
+            raise RuntimeError(f"The Odds API returned HTTP {resp.status_code}")
 
         excluded = [name.lower()
                     for name in config.get("excluded_bookmakers", [])]
@@ -156,7 +156,7 @@ class OddsApiSource:
                         prices.setdefault(oc["name"], []).append(
                             (title, float(oc["price"]))
                         )
-            # 足球 1X2 需要三个结果都有报价，否则会误判套利
+            # Soccer 1X2 needs all three outcomes priced, else arb detection is wrong
             if len(prices) < 3:
                 continue
             commence = ev.get("commence_time")
@@ -175,7 +175,7 @@ class OddsApiSource:
             return configured
         if self.sport_key:
             return self.sport_key
-        # /sports 列表请求不消耗配额
+        # The /sports list request does not consume quota
         try:
             resp = requests.get(
                 f"{ODDS_API_BASE}/sports",
@@ -183,9 +183,9 @@ class OddsApiSource:
                 timeout=25,
             )
         except requests.RequestException as e:
-            raise RuntimeError(f"网络请求失败（{type(e).__name__}）") from None
+            raise RuntimeError(f"Network request failed ({type(e).__name__})") from None
         if resp.status_code >= 400:
-            raise RuntimeError(f"赛事列表请求失败（HTTP {resp.status_code}）")
+            raise RuntimeError(f"Sports list request failed (HTTP {resp.status_code})")
         candidates = [
             s["key"] for s in resp.json()
             if s["key"].startswith("soccer") and "world_cup" in s["key"]
@@ -194,10 +194,10 @@ class OddsApiSource:
         ]
         if not candidates:
             raise RuntimeError(
-                "在 The Odds API 中未找到进行中的世界杯单场赛事，"
-                "可在 config.json 中手动指定 sport_key"
+                "No live World Cup match markets found on The Odds API; "
+                "set sport_key manually in config.json"
             )
-        # 单场比赛盘的 key 最短；冠军盘等衍生市场 key 带后缀
+        # The match (per-game) market has the shortest key; derived markets carry suffixes
         self.sport_key = sorted(candidates, key=len)[0]
         return self.sport_key
 

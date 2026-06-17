@@ -239,6 +239,9 @@ const I18N = {
     empty_opps: "当前行情未发现套利空间（真实大赛盘口效率高，机会稀少且短暂；可看下方「市场总览」了解离套利有多近）",
     empty_market: "暂无行情，点「立即抓取一次」或等待下次轮询", empty_records: "暂无记录", empty_logs: "暂无日志",
     tag_settled: "已结算", tag_voided: "已作废", tag_pending: "待开赛", tag_manual: "手动",
+    status_placed: "已下单", status_held: "已持仓", status_below_threshold: "低于利润率阈值",
+    status_autobet_off: "自动下单已关闭", status_started: "已开赛", status_insufficient: "余额不足",
+    status_no_profit_rounded: "取整后无利润",
     btn_help: "下单助手", arb_pre: "套利", kickoff_pre: "开赛",
     helper_title: "下单助手 · ", helper_kickoff: "开赛 ", helper_arbrate: " · 套利率 ",
     helper_balance: "模拟可用余额 ", helper_bet: "下注", helper_copy: "复制金额",
@@ -279,6 +282,9 @@ const I18N = {
     empty_opps: "No arbitrage in current odds (big events are efficient — opportunities are rare and short-lived; see Market overview below for how close).",
     empty_market: "No odds yet — click “Fetch now” or wait for the next poll.", empty_records: "No records", empty_logs: "No logs",
     tag_settled: "Settled", tag_voided: "Voided", tag_pending: "Pending", tag_manual: "Manual",
+    status_placed: "Placed", status_held: "Holding", status_below_threshold: "Below threshold",
+    status_autobet_off: "Auto-bet off", status_started: "Started", status_insufficient: "Insufficient balance",
+    status_no_profit_rounded: "No profit after rounding",
     btn_help: "Bet Helper", arb_pre: "Arb", kickoff_pre: "kickoff",
     helper_title: "Bet Helper · ", helper_kickoff: "Kickoff ", helper_arbrate: " · arb ",
     helper_balance: "Paper balance ", helper_bet: "Bet", helper_copy: "Copy",
@@ -296,32 +302,33 @@ const I18N = {
 let lang = localStorage.getItem("lang") || "zh";
 function t(k) { return (I18N[lang][k] ?? I18N.zh[k] ?? k); }
 
-// 把后端中文（机会状态 / 日志 / 净值备注）在英文模式下翻译过来
+// Backend emits English (logs / equity notes / errors); translate to Chinese for zh mode.
 function tMsg(s) {
-  if (lang !== "en" || !s) return s;
+  if (lang !== "zh" || !s) return s;
   return s
-    .replace(/^抓取成功：(\d+) 场比赛，(\d+) 个套利机会$/, "Fetched: $1 matches, $2 arb(s)")
-    .replace(/^行情获取失败：/, "Fetch failed: ")
-    .replace(/^自动下单 (.+)：投入 (.+)，锁定利润 (.+)（(.+)%）$/, "Auto bet $1: stake $2, locked profit $3 ($4%)")
-    .replace(/^手动下单 (.+)：投入 (.+)，锁定利润 (.+)（(.+)%）$/, "Manual bet $1: stake $2, locked profit $3 ($4%)")
-    .replace(/^结算 (.+)：\+(.+)（利润 (.+)）$/, "Settled $1: +$2 (profit $3)")
-    .replace(/^下单 (.+)$/, "Bet $1")
-    .replace(/^结算 (.+)$/, "Settled $1")
-    .replace(/^连接 API · 真实基线$/, "API connected · baseline")
-    .replace(/^初始资金$/, "Initial funds")
-    .replace(/余额归零，自动重置，资金恢复至 (.+) AUD/, "Balance hit zero, auto-reset to $1 AUD")
-    .replace(/手动重置，资金恢复至 (.+) AUD/, "Manual reset to $1 AUD")
-    .replace(/^手动重置$/, "Manual reset")
-    .replace(/清空历史数据，从连接 API 起作为真实基线，资金 (.+) AUD/, "History cleared; baseline from API connection, funds $1 AUD")
-    .replace(/恢复连接 API 后 (\d+) 笔真实下单，投入合计 (.+)/, "Restored $1 real bets after API connection, total stake $2")
-    .replace(/网络请求失败（(.+)）/, "Network request failed ($1)")
-    .replace(/请求过于频繁（429）.*/, "Rate limited (429), polling slowed automatically")
-    .replace(/API key 无效（401）/, "Invalid API key (401)")
-    .replace(/未配置 The Odds API key.*/, "The Odds API key not set (enter it in Settings)")
-    .replace(/赛事 (.+) 不支持 h2h 市场.*/, "Event $1 has no h2h market; excluded and will re-pick")
-    .replace(/在 The Odds API 中未找到进行中的世界杯单场赛事.*/, "No live World Cup match markets found on The Odds API")
-    .replace(/The Odds API 返回 HTTP (\d+)/, "The Odds API returned HTTP $1")
-    .replace(/赛事列表请求失败（HTTP (\d+)）/, "Sports list request failed (HTTP $1)");
+    .replace(/^Fetched: (\d+) matches, (\d+) arb\(s\)$/, "抓取成功：$1 场比赛，$2 个套利机会")
+    .replace(/^Fetch failed: /, "行情获取失败：")
+    .replace(/^Auto bet (.+): stake (.+), locked profit (.+) \((.+)%\)$/, "自动下单 $1：投入 $2，锁定利润 $3（$4%）")
+    .replace(/^Manual bet (.+): stake (.+), locked profit (.+) \((.+)%\)$/, "手动下单 $1：投入 $2，锁定利润 $3（$4%）")
+    .replace(/^Settled (.+): \+(.+) \(profit (.+)\)$/, "结算 $1：+$2（利润 $3）")
+    .replace(/^Bet (.+)$/, "下单 $1")
+    .replace(/^Settled (.+)$/, "结算 $1")
+    .replace(/^Initial funds$/, "初始资金")
+    .replace(/^Balance hit zero, auto-reset; funds restored to (.+) AUD$/, "余额归零，自动重置，资金恢复至 $1 AUD")
+    .replace(/^Manual reset; funds restored to (.+) AUD$/, "手动重置，资金恢复至 $1 AUD")
+    .replace(/^Balance hit zero, auto-reset$/, "余额归零，自动重置")
+    .replace(/^Manual reset$/, "手动重置")
+    .replace(/^Network request failed \((.+)\)$/, "网络请求失败（$1）")
+    .replace(/^Rate limited \(429\).*/, "请求过于频繁（429），已自动延长轮询间隔")
+    .replace(/^Invalid API key \(401\)$/, "API key 无效（401）")
+    .replace(/^The Odds API key not set.*/, "未配置 The Odds API key（在设置面板填入）")
+    .replace(/^Event (.+) has no h2h market.*/, "赛事 $1 不支持 h2h 市场，已排除并将自动重选")
+    .replace(/^No live World Cup match markets found.*/, "在 The Odds API 中未找到进行中的世界杯单场赛事")
+    .replace(/^The Odds API returned HTTP (\d+)$/, "The Odds API 返回 HTTP $1")
+    .replace(/^Sports list request failed \(HTTP (\d+)\)$/, "赛事列表请求失败（HTTP $1）")
+    .replace(/^stake too small$/, "投入金额过小")
+    .replace(/^exceeds available balance \((.+)\)$/, "超出可用余额（$1）")
+    .replace(/^match no longer in current odds.*/, "该比赛已不在当前行情中，请先抓取最新赔率");
 }
 
 function applyLang() {
@@ -436,11 +443,11 @@ function renderOpps(opps) {
   let html = `<table><tr><th>${t("th_match")}</th><th>${t("th_kickoff")}</th><th>${t("th_best")}</th><th>${t("th_profit")}</th><th>${t("th_status")}</th><th></th></tr>`;
   for (const o of opps) {
     const legs = o.legs.map(l => esc(l.outcome) + " @" + l.odds + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
-    const cls = (o.status === "已下单" || o.status === "已持仓") ? "ok" : "warn";
+    const cls = (o.status === "placed" || o.status === "held") ? "ok" : "warn";
     html += `<tr><td>${esc(o.match_name)}</td><td>${ts2time(o.commence_ts)}</td>
       <td class="legs">${legs}</td>
       <td class="pos">+${o.profit_pct.toFixed(2)}%</td>
-      <td><span class="tag ${cls}">${esc(tMsg(o.status))}</span></td>
+      <td><span class="tag ${cls}">${esc(t("status_" + o.status))}</span></td>
       <td><button class="btn-help" onclick="openBetHelper('${o.event_id}')">${t("btn_help")}</button></td></tr>`;
   }
   el.innerHTML = html + "</table>";

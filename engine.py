@@ -1,4 +1,4 @@
-"""核心引擎：轮询行情 -> 检测套利 -> 模拟下单 -> 开赛结算 -> 净值记录。"""
+"""Core engine: poll odds -> detect arbitrage -> paper-bet -> settle at kickoff -> record equity."""
 import json
 import os
 import sqlite3
@@ -13,25 +13,25 @@ DB_PATH = os.path.join(BASE, "arb.db")
 CONFIG_PATH = os.path.join(BASE, "config.json")
 
 DEFAULT_CONFIG = {
-    "mode": "live",                # 固定使用 The Odds API 真实赔率（UI 已移除 demo 切换）
+    "mode": "live",                # always The Odds API live odds (demo toggle removed from UI)
     "odds_api_key": "",
-    "sport_key": "auto",           # auto = 自动查找世界杯赛事 key
-    "region": "au",                # 澳洲博彩商
-    "poll_interval_live": 7200,    # 真实模式轮询间隔（秒），免费配额下建议 >= 5400
+    "sport_key": "auto",           # auto = discover the World Cup sport key
+    "region": "au",                # Australian bookmakers
+    "poll_interval_live": 7200,    # live poll interval (s); >= 5400 recommended on the free tier
     "poll_interval_demo": 15,
-    "min_profit_pct": 0.3,         # 低于该利润率的机会不下单
-    "stake_fraction": 0.10,        # 单组套利投入 = 余额 * 该比例（受 max_stake 限制）
+    "min_profit_pct": 0.3,         # skip opportunities below this profit margin
+    "stake_fraction": 0.10,        # stake per arb = balance * this fraction (capped by max_stake)
     "max_stake": 2000.0,
     "initial_balance": 10000.0,
     "auto_bet": True,
-    # Betfair 是交易所赔率（未扣 ~5% 佣金），与博彩商直接比价会产生假套利
+    # Betfair is exchange odds (before ~5% commission); comparing it to bookmakers fakes arbs
     "excluded_bookmakers": ["Betfair"],
 }
 
-# 真实模式轮询间隔下限，防止误配置打爆 API 配额
+# Hard floor on the live poll interval, to stop a misconfig from burning the API quota
 MIN_LIVE_INTERVAL = 60
 
-# 各博彩商官网（API 不提供具体盘口深链，给首页方便手动下单时快速跳转）
+# Bookmaker home pages (the API has no deep links to specific markets; these speed up manual betting)
 BOOKMAKER_LINKS = {
     "sportsbet": "https://www.sportsbet.com.au/betting/soccer",
     "tab": "https://www.tab.com.au/sports/betting/Soccer",
@@ -63,12 +63,12 @@ class Engine:
         self.quota = None
         self.last_poll_ts = None
         self.last_error = None
-        self.next_poll_at = 0       # 立即开始第一轮
+        self.next_poll_at = 0       # start the first poll immediately
         self.force_flag = False
         self.backoff = 1
         self.net_retries = 0
 
-    # ---------- 配置 ----------
+    # ---------- config ----------
 
     def _load_config(self):
         cfg = dict(DEFAULT_CONFIG)
@@ -118,7 +118,7 @@ class Engine:
         cfg["odds_api_key"] = ("*" * 6 + key[-4:]) if len(key) > 4 else ""
         return cfg
 
-    # ---------- 数据库 ----------
+    # ---------- database ----------
 
     def _init_db(self):
         self.db.executescript("""
@@ -152,11 +152,11 @@ class Engine:
             self.db.execute(
                 "ALTER TABLE arb_groups ADD COLUMN source TEXT DEFAULT 'auto'")
         except sqlite3.OperationalError:
-            pass  # 列已存在
+            pass  # column already exists
         if self._meta("balance") is None:
             self._set_meta("balance", self.config["initial_balance"])
             self._set_meta("resets", 0)
-            self._record_equity("初始资金")
+            self._record_equity("Initial funds")
         self.db.commit()
 
     def _meta(self, key):
@@ -191,7 +191,7 @@ class Engine:
                         (time.time(), balance, equity, note))
         self.db.commit()
 
-    # ---------- 主循环 ----------
+    # ---------- main loop ----------
 
     def start(self):
         t = threading.Thread(target=self._loop, daemon=True)
@@ -206,7 +206,7 @@ class Engine:
                 if due:
                     self._poll()
                 self._settle_due()
-            except Exception as e:  # 任何异常都不能杀死主循环
+            except Exception as e:  # no exception may kill the main loop
                 with self.lock:
                     self.last_error = str(e)
             time.sleep(1)
@@ -231,18 +231,18 @@ class Engine:
                 interval = self._interval()
                 if mode != "live":
                     self.next_poll_at = now + interval
-                elif "429" in msg or "频繁" in msg:
-                    # 限流：指数退避，避免继续打爆配额
+                elif "429" in msg:
+                    # Rate limited: exponential backoff so we stop hammering the quota
                     self.backoff = min(self.backoff * 2, 8)
                     self.next_poll_at = now + interval * self.backoff
-                elif "网络" in msg or "ConnectionError" in msg or "Timeout" in msg:
-                    # 瞬时网络抖动：60s 起快速重试，最多到正常间隔，不拉长到几小时
+                elif "Network request failed" in msg or "ConnectionError" in msg or "Timeout" in msg:
+                    # Transient network blip: retry fast (60s up), capped at the normal interval
                     self.net_retries = min(self.net_retries + 1, 5)
                     self.next_poll_at = now + min(60 * self.net_retries, interval)
                 else:
-                    # 配置类错误（401/422 等）：按正常间隔，重试也需先修正配置
+                    # Config errors (401/422, ...): normal interval; a retry needs a config fix first
                     self.next_poll_at = now + interval
-                self._log("error", f"行情获取失败：{msg}")
+                self._log("error", f"Fetch failed: {msg}")
             return
 
         with self.lock:
@@ -256,20 +256,21 @@ class Engine:
             self.opportunities, self.market_view = self._scan(events)
             if mode == "live":
                 self._log("poll",
-                          f"抓取成功：{len(events)} 场比赛，"
-                          f"{len(self.opportunities)} 个套利机会")
+                          f"Fetched: {len(events)} matches, "
+                          f"{len(self.opportunities)} arb(s)")
 
     def _scan(self, events):
-        """每场比赛取各结果最优赔率，构建市场总览，对真实套利自动下单。
+        """Take each outcome's best odds, build the market overview, auto-bet real arbs.
 
-        返回 (opportunities, market_view)：
-        - opportunities：真实套利（profit_pct > 0），会触发自动下单；
-        - market_view：所有比赛的最优组合与套利率（含负值，按接近套利排序），
-          即使没有机会，页面每轮也有鲜活数据，并能看到市场离套利有多近。
+        Returns (opportunities, market_view):
+        - opportunities: real arbs (profit_pct > 0) that trigger auto-betting;
+        - market_view: best combo + arb % for every match (incl. negative, sorted by
+          closeness to an arb), so the page always has fresh data and shows how close
+          the market is to an arb even when there is none.
         """
         opportunities = []
         market_view = []
-        self._market_index = {}   # event_id -> 比赛快照，供手动下单复算注金
+        self._market_index = {}   # event_id -> snapshot, used to re-size manual bets
         with self.lock:
             for ev in events:
                 best = {}
@@ -308,38 +309,39 @@ class Engine:
         return opportunities, market_view
 
     def _maybe_bet(self, ev, best, inv, profit_pct):
+        """Returns a language-neutral status code; the frontend translates it for display."""
         if profit_pct < self.config["min_profit_pct"]:
-            return "低于利润率阈值"
+            return "below_threshold"
         if not self.config["auto_bet"]:
-            return "自动下单已关闭"
+            return "autobet_off"
         exists = self.db.execute(
             "SELECT 1 FROM arb_groups WHERE event_id=? AND status='open'",
             (ev["event_id"],),
         ).fetchone()
         if exists:
-            return "已持仓"
+            return "held"
         if ev["commence_ts"] <= time.time():
-            return "已开赛"
+            return "started"
 
         balance = self._meta("balance")
         total = min(balance * self.config["stake_fraction"],
                     self.config["max_stake"], balance)
         if total < 10:
-            return "余额不足"
+            return "insufficient"
 
         legs = self._alloc_legs(best, inv, total)
         payout = round(min(o * s for _, _, o, s in legs), 2)
         total_stake = round(sum(s for _, _, _, s in legs), 2)
         if payout <= total_stake:
-            return "取整后无利润"
+            return "no_profit_rounded"
 
         self._place_group(ev["event_id"], ev["match_name"], ev["commence_ts"],
                           legs, profit_pct, "auto")
-        return "已下单"
+        return "placed"
 
     @staticmethod
     def _alloc_legs(best, inv, total):
-        """按 1/odds 比例分配注金，使各结果赔付一致。返回 (outcome, bookie, odds, stake) 列表。"""
+        """Split stakes by 1/odds so every outcome pays the same. Returns (outcome, bookie, odds, stake)."""
         return [
             (outcome, bookie, odds, round(total * (1 / odds) / inv, 2))
             for outcome, (bookie, odds) in best.items()
@@ -347,7 +349,7 @@ class Engine:
 
     def _place_group(self, event_id, match_name, commence_ts, legs,
                      profit_pct, source):
-        """记一组套利下单（auto 自动 / manual 手动），扣减余额并记账。"""
+        """Record one arb bet group (auto / manual): deduct balance and book it."""
         total_stake = round(sum(s for _, _, _, s in legs), 2)
         payout = round(min(o * s for _, _, o, s in legs), 2)
         group_id = uuid.uuid4().hex[:10]
@@ -366,26 +368,26 @@ class Engine:
             )
         self._set_meta("balance", round(self._meta("balance") - total_stake, 2))
         self.db.commit()
-        tag = "自动下单" if source == "auto" else "手动下单"
+        tag = "Auto bet" if source == "auto" else "Manual bet"
         self._log("bet",
-                  f"{tag} {match_name}：投入 {total_stake:.2f}，"
-                  f"锁定利润 {payout - total_stake:.2f}（{profit_pct:.2f}%）")
-        self._record_equity(f"下单 {match_name}")
+                  f"{tag} {match_name}: stake {total_stake:.2f}, "
+                  f"locked profit {payout - total_stake:.2f} ({profit_pct:.2f}%)")
+        self._record_equity(f"Bet {match_name}")
         self._check_reset()
         return group_id
 
     def record_manual_bet(self, event_id, total_stake):
-        """用户手动在各博彩商下注后，按当前最优赔率记入模拟账户。"""
+        """After the user places bets at each bookmaker, book it into the paper account."""
         with self.lock:
             snap = getattr(self, "_market_index", {}).get(event_id)
             if not snap:
-                return {"ok": False, "error": "该比赛已不在当前行情中，请先抓取最新赔率"}
+                return {"ok": False, "error": "match no longer in current odds; fetch the latest first"}
             total = float(total_stake)
             balance = self._meta("balance")
             if total < 10:
-                return {"ok": False, "error": "投入金额过小"}
+                return {"ok": False, "error": "stake too small"}
             if total > balance:
-                return {"ok": False, "error": f"超出可用余额（{balance:.2f}）"}
+                return {"ok": False, "error": f"exceeds available balance ({balance:.2f})"}
 
             inv = snap["inv"]
             legs = self._alloc_legs(snap["best"], inv, total)
@@ -402,7 +404,7 @@ class Engine:
                 (now,),
             ).fetchall()
             for g in rows:
-                # 套利组合赔付与赛果无关，开赛即按锁定赔付结算
+                # An arb's payout is independent of the result; settle at kickoff by locked payout
                 balance = round(self._meta("balance") + g["payout"], 2)
                 self._set_meta("balance", balance)
                 self.db.execute(
@@ -412,30 +414,30 @@ class Engine:
                 self.db.commit()
                 profit = g["payout"] - g["total_stake"]
                 self._log("settle",
-                          f"结算 {g['match_name']}：+{g['payout']:.2f}"
-                          f"（利润 {profit:+.2f}）")
-                self._record_equity(f"结算 {g['match_name']}")
+                          f"Settled {g['match_name']}: +{g['payout']:.2f} "
+                          f"(profit {profit:+.2f})")
+                self._record_equity(f"Settled {g['match_name']}")
 
     def _check_reset(self):
         if self._meta("balance") <= 0.005:
-            self._do_reset("余额归零，自动重置")
+            self._do_reset("Balance hit zero, auto-reset")
 
     def reset_account(self, reason="manual"):
         with self.lock:
             self.db.execute(
                 "UPDATE arb_groups SET status='voided' WHERE status='open'")
             self.db.commit()
-            self._do_reset("手动重置" if reason == "manual" else reason)
+            self._do_reset("Manual reset" if reason == "manual" else reason)
 
     def _do_reset(self, note):
         initial = self.config["initial_balance"]
         self._set_meta("balance", initial)
         self._set_meta("resets", int(self._meta("resets") or 0) + 1)
         self.db.commit()
-        self._log("reset", f"{note}，资金恢复至 {initial:.2f} AUD")
+        self._log("reset", f"{note}; funds restored to {initial:.2f} AUD")
         self._record_equity(note)
 
-    # ---------- 状态快照 ----------
+    # ---------- state snapshot ----------
 
     def snapshot(self):
         with self.lock:
