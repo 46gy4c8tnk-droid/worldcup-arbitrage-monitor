@@ -6,7 +6,9 @@ A dashboard that monitors **1X2 (match-result) odds for World Cup matches across
 bookmakers**, detects cross-book arbitrage (surebets), and runs a **10,000 AUD paper-trading
 account** that auto-bets opportunities, settles at kickoff, and charts the equity curve.
 
-> ⚠️ **Paper money only — this tool places no real bets.** It is for study and research.
+> ⚠️ **Paper money only — this tool places no real bets and handles no real money.** For
+> education and research; not betting advice. Gambling is regulated and can be addictive.
+> Please read the full **[Disclaimer](DISCLAIMER.md)** before use.
 
 ![mode: live](https://img.shields.io/badge/data-The%20Odds%20API-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -79,6 +81,7 @@ arb.db             SQLite data (bets, equity, logs) — git-ignored; delete to w
 For study and research only. Real-world arbitrage betting carries risks not modeled here —
 odds movement, partial fills (leg risk), bookmaker stake limits and account closures — and
 gambling is heavily regulated across Australian states. **This tool executes no real bets.**
+See the full **[Disclaimer](DISCLAIMER.md)** (incl. responsible-gambling help).
 
 ## License
 
