@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy to config.json (gitignored) OR just enter the API key in the dashboard Settings panel. Never commit your real key.",
+  "mode": "live",
+  "odds_api_key": "PUT_YOUR_THE_ODDS_API_KEY_HERE",
+  "sport_key": "auto",
+  "region": "au",
+  "poll_interval_live": 5400,
+  "min_profit_pct": 0.3,
+  "stake_fraction": 0.10,
+  "max_stake": 2000.0,
+  "initial_balance": 10000.0,
+  "auto_bet": true
+}

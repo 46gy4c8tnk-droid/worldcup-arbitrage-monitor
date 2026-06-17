@@ -1,89 +1,85 @@
-# 世界杯跨平台套利监控（澳洲博彩商 · 模拟账户）
+# World Cup Cross-Book Arbitrage Monitor
 
-监控澳洲主流博彩商的世界杯 1X2 赔率，自动检测跨平台套利机会（surebet），
-用 **10,000 AUD 模拟账户**自动下单，开赛后按锁定赔付结算，并提供收益率曲线、
-下单历史、事件日志等功能。**全部为模拟资金，不涉及任何真实下注。**
+*English | [中文](README.zh.md)*
 
-## 快速开始
+A dashboard that monitors **1X2 (match-result) odds for World Cup matches across Australian
+bookmakers**, detects cross-book arbitrage (surebets), and runs a **10,000 AUD paper-trading
+account** that auto-bets opportunities, settles at kickoff, and charts the equity curve.
 
-```powershell
+> ⚠️ **Paper money only — this tool places no real bets.** It is for study and research.
+
+![mode: live](https://img.shields.io/badge/data-The%20Odds%20API-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
+
+## Features
+
+- **Live odds** via [The Odds API](https://the-odds-api.com) — a legal aggregator of Australian
+  bookmaker prices (Sportsbet, TAB, Ladbrokes, Neds, PointsBet, Unibet, Betr, PlayUp, …).
+- **Arbitrage detection**: for each match, if `1/best₁ + 1/best₂ + 1/best₃ < 1`, it's a surebet.
+- **Paper account**: 10,000 AUD, **auto-resets to 10,000 if it ever hits zero** (reset count tracked).
+- **Auto-betting**: opportunities above the profit threshold are staked by `1/odds` so every
+  outcome pays the same; profit is locked at bet time and realized at kickoff.
+- **Bet Helper (semi-auto / manual)**: enter a total stake → get the exact amount per leg,
+  guaranteed return/P&L, and direct links to each bookmaker; place them yourself, then log it.
+- **Market overview**: how close *every* match is to an arb (even negative), refreshed each poll.
+- **Equity curve, bet history, event log, desktop alerts.**
+- **Bilingual UI** — toggle 中文 / English with the top-right button.
+
+## Quick start
+
+```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-打开浏览器访问 **http://127.0.0.1:8788**。
+Open **http://127.0.0.1:8788**.
 
-默认运行在 **demo 模式**（本地模拟行情，每 15 秒刷新，无任何外部请求），
-启动后几分钟内即可看到完整流程：发现套利机会 → 自动下单 → 开赛结算 → 净值上涨。
+1. Get a free API key at [the-odds-api.com](https://the-odds-api.com).
+2. Paste it into the **Settings** panel and click **Save**. (It is stored in `config.json`,
+   which is git-ignored — your key never leaves your machine.)
+3. The World Cup sport key is auto-detected.
 
-## 两种数据模式
+## Fetch frequency & quota (important)
 
-| | demo 模拟行情 | live 真实赔率 |
+**Do not scrape Sportsbet/TAB pages directly** — it violates their ToS and risks IP bans.
+This project reads odds through a legal aggregator API instead.
+
+The Odds API free tier is **500 credits/month**; one poll of `h2h` + `au` costs **1 credit**:
+
+| Interval | ~Monthly | Verdict |
 |---|---|---|
-| 数据来源 | 本地随机生成（含套利注入） | [The Odds API](https://the-odds-api.com) |
-| 覆盖博彩商 | 模拟 8 家澳洲品牌 | Sportsbet、TAB、Ladbrokes、Neds、PointsBet、Unibet、Betr、PlayUp 等（`regions=au`） |
-| 外部请求 | 无 | 1 次轮询 = 1 个配额积分 |
-| 默认间隔 | 15 秒 | 2 小时（可调，下限 60 秒） |
+| 2 hours | ~360 | ✅ safe |
+| 90 min | ~480 | ⚠️ near the cap (default) |
+| 30 min | ~1440 | ❌ over |
 
-切换到 live 模式：到 [the-odds-api.com](https://the-odds-api.com) 免费注册拿 API key，
-在页面右侧设置面板填入 key、把模式切到 live、保存即可。
-世界杯赛事 key 会自动识别（也可在 `config.json` 手动指定 `sport_key`）。
+Built-in protection: 60s hard floor on the interval; exponential backoff on HTTP 429;
+fast retry on transient network errors; remaining quota shown live in the UI.
 
-## 关于抓取频率（重要）
+## Paper-account rules
 
-**不要直接爬取 Sportsbet/TAB 等博彩网站页面**：这些网站有 Cloudflare 等反爬措施，
-高频抓取违反其服务条款，且有 IP 封禁风险。本项目通过合法的赔率聚合 API 取数。
+- Stake per arb = `min(balance × stake_fraction, max_stake)`, split across legs by `1/odds`.
+- One open position per match (no double-betting the same event).
+- Settles at **kickoff**, not full-time — an arb's payout is independent of the result, so the
+  profit is locked once all legs are placed.
+- Equity = available balance + locked payout of open positions; the curve plots equity.
 
-The Odds API 免费档 **500 积分/月**，h2h 市场 + au 地区一次请求消耗 1 积分：
-
-| 轮询间隔 | 月消耗 | 评估 |
-|---|---|---|
-| 2 小时 | ~360 | ✅ 安全（默认值） |
-| 90 分钟 | ~480 | ⚠️ 接近上限 |
-| 30 分钟 | ~1440 | ❌ 超额，需付费档 |
-
-内置保护：轮询间隔硬下限 60 秒；遇到 429 限流自动指数退避；
-页面实时显示 API 剩余配额（取自响应头 `x-requests-remaining`）。
-
-## 模拟账户规则
-
-- 初始资金 10,000 AUD；**余额归零自动重置为 10,000**（重置次数会记录）。
-- 发现利润率 ≥ 阈值（默认 0.3%）的机会自动下单：按 `1/赔率` 比例在各结果间
-  分配注金，使三个结果赔付一致，利润在下单瞬间锁定。
-- 单组投入 = min(余额 × 10%, 2000 AUD)，均可在设置面板调整。
-- 同一场比赛持仓期间不重复下单；开赛时间一到自动结算入账。
-- 净值 = 可用余额 + 持仓锁定赔付，收益率曲线按净值绘制。
-
-## 文件结构
+## Project structure
 
 ```
-app.py          Flask 服务（4 个 API + 静态页）
-engine.py       核心引擎：轮询/套利检测/模拟下单/结算/重置
-datasources.py  The Odds API 客户端 + demo 行情生成器
-static/index.html  仪表盘（Chart.js 收益曲线、机会/持仓/历史表格、设置）
-config.json     运行时配置（自动生成）
-arb.db          SQLite 数据（下单、净值、日志；删除即完全清零）
+app.py             Flask server (state / config / poll / reset / manual_bet APIs + static page)
+engine.py          Core engine: polling, arb detection, paper betting, settlement, reset
+datasources.py     The Odds API client
+static/index.html  Dashboard (Chart.js equity curve, tables, settings, bet helper, i18n)
+config.example.json  Config template (copy to config.json, or set the key in the UI)
+config.json        Runtime config incl. API key — GIT-IGNORED, never committed
+arb.db             SQLite data (bets, equity, logs) — git-ignored; delete to wipe clean
 ```
 
-## v1.1 半自动 / 手动下单辅助
+## Disclaimer
 
-真实大赛盘口效率高，跨平台套利稀少且转瞬即逝，所以 live 模式下页面常常"很安静"。
-v1.1 围绕"帮你手动下单"补了几件事：
+For study and research only. Real-world arbitrage betting carries risks not modeled here —
+odds movement, partial fills (leg risk), bookmaker stake limits and account closures — and
+gambling is heavily regulated across Australian states. **This tool executes no real bets.**
 
-- **市场总览**：列出所有比赛各结果的最优赔率与套利率（含负值，按接近套利排序）。
-  即使没有机会，每次抓取也能看到市场离套利有多近、哪家赔率最突出。
-- **下单助手**：任意比赛点「下单助手」→ 输入计划总投入 → 自动按 `1/赔率` 算出
-  每家该下多少、保底回收和盈亏，并给出各博彩商官网直达链接（API 不提供具体盘口
-  深链，给首页）；按金额到各家下完后点「记入模拟账户」，该笔标记为"手动"并计入
-  净值曲线与历史。
-- **状态栏 + 倒计时**：顶部常显运行状态、上次/下次抓取倒计时（每秒跳动），
-  一眼确认系统在工作而非卡死。
-- **桌面提醒**：勾选后，发现真实套利机会会弹浏览器通知，无需盯屏。
+## License
 
-> 注意：传统博彩商（Sportsbet/TAB 等）没有合规下注 API，本工具只做"算注金 + 跳转 +
-> 记账"的辅助，真实下注仍需你手动在各家完成——这也是规避账号风险的现实做法。
-
-## 免责声明
-
-仅供学习与研究。真实世界的套利下注存在赔率变动、单边成交（leg risk）、
-博彩商限注/封号等风险；澳洲各州对博彩有严格监管。本工具不执行任何真实交易。
+[MIT](LICENSE)
