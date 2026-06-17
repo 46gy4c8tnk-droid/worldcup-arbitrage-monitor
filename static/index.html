@@ -63,7 +63,7 @@
   .statusbar b { color: var(--text); }
   .countdown { color: var(--blue); font-variant-numeric: tabular-nums; }
   .btn-help { padding: 3px 10px; font-size: 11.5px; }
-  /* 下单助手弹窗 */
+  /* 下单助手弹窗 / bet helper modal */
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
               display: none; align-items: center; justify-content: center; z-index: 100; }
   .modal-bg.show { display: flex; }
@@ -85,88 +85,89 @@
 </style>
 </head>
 <body>
-<h1>⚽ 世界杯跨平台套利监控 <span id="modeTag" class="tag info"></span></h1>
-<div class="sub">澳洲博彩商赔率对比 · 模拟账户自动下单 · 数据仅供学习研究</div>
+<h1><span data-i18n="h1">⚽ 世界杯跨平台套利监控</span> <span id="modeTag" class="tag info"></span></h1>
+<div class="sub" data-i18n="subtitle">澳洲博彩商赔率对比 · 模拟账户自动下单 · 数据仅供学习研究</div>
 
 <div class="statusbar">
   <span><span class="dot" id="liveDot"></span><b id="stRunning">运行中</b></span>
-  <span>上次抓取：<b id="stLast">–</b></span>
-  <span>下次抓取：<span class="countdown" id="stCountdown">–</span></span>
-  <span>监控比赛：<b id="stMatches">–</b> 场</span>
+  <span><span data-i18n="st_last">上次抓取：</span><b id="stLast">–</b></span>
+  <span><span data-i18n="st_next">下次抓取：</span><span class="countdown" id="stCountdown">–</span></span>
+  <span><span data-i18n="st_matches">监控比赛：</span><b id="stMatches">–</b> <span data-i18n="st_matches_suf">场</span></span>
   <span style="margin-left:auto">
-    <label style="font-size:12px"><input type="checkbox" id="notifyToggle"> 发现机会时桌面提醒</label>
+    <button id="langBtn" class="btn-help" onclick="toggleLang()">EN</button>
+    <label style="font-size:12px; margin-left:10px"><input type="checkbox" id="notifyToggle"> <span data-i18n="notify">发现机会时桌面提醒</span></label>
   </span>
 </div>
 
 <div class="cards">
-  <div class="card"><div class="label">账户净值 (AUD)</div><div class="value" id="equity">–</div></div>
-  <div class="card"><div class="label">可用余额 (AUD)</div><div class="value" id="balance">–</div></div>
-  <div class="card"><div class="label">累计收益率</div><div class="value" id="returnPct">–</div></div>
-  <div class="card"><div class="label">已结算 / 持仓中</div><div class="value" id="counts">–</div></div>
-  <div class="card"><div class="label">累计利润 (AUD)</div><div class="value" id="totalProfit">–</div></div>
-  <div class="card"><div class="label">归零重置次数</div><div class="value" id="resets">–</div></div>
-  <div class="card"><div class="label">API 剩余配额</div><div class="value" id="quota">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_equity">账户净值 (AUD)</div><div class="value" id="equity">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_balance">可用余额 (AUD)</div><div class="value" id="balance">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_return">累计收益率</div><div class="value" id="returnPct">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_counts">已结算 / 持仓中</div><div class="value" id="counts">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_profit">累计利润 (AUD)</div><div class="value" id="totalProfit">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_resets">归零重置次数</div><div class="value" id="resets">–</div></div>
+  <div class="card"><div class="label" data-i18n="card_quota">API 剩余配额</div><div class="value" id="quota">–</div></div>
 </div>
 
 <div class="grid">
 <div>
   <div class="panel">
-    <h2>收益率曲线（净值 = 余额 + 持仓锁定赔付）</h2>
+    <h2 data-i18n="panel_chart">收益率曲线（净值 = 余额 + 持仓锁定赔付）</h2>
     <div id="chartWrap"><canvas id="chart"></canvas></div>
   </div>
 
   <div class="panel">
-    <h2>实时套利机会 <span class="sub" style="font-weight:400">· 点「下单助手」算注金/记账</span></h2>
+    <h2><span data-i18n="panel_opps">实时套利机会</span> <span class="sub" style="font-weight:400" data-i18n="panel_opps_hint">· 点「下单助手」算注金/记账</span></h2>
     <div id="oppsWrap"></div>
   </div>
 
   <div class="panel">
-    <h2>持仓中（开赛后自动结算）</h2>
+    <h2 data-i18n="panel_open">持仓中（开赛后自动结算）</h2>
     <div id="openWrap"></div>
   </div>
 
   <div class="panel">
-    <h2>市场总览 <span class="sub" style="font-weight:400">· 全部比赛离套利有多近（每次抓取刷新）</span></h2>
+    <h2><span data-i18n="panel_market">市场总览</span> <span class="sub" style="font-weight:400" data-i18n="panel_market_hint">· 全部比赛离套利有多近（每次抓取刷新）</span></h2>
     <div id="marketWrap"></div>
   </div>
 
   <div class="panel">
-    <h2>下单历史</h2>
+    <h2 data-i18n="panel_history">下单历史</h2>
     <div id="histWrap"></div>
   </div>
 </div>
 
 <div>
   <div class="panel">
-    <h2>设置</h2>
+    <h2 data-i18n="panel_settings">设置</h2>
     <div class="row">
-      <label>API Key</label>
-      <input id="cfgKey" type="password" placeholder="the-odds-api.com 获取" style="flex:1">
+      <label data-i18n="lbl_key">API Key</label>
+      <input id="cfgKey" type="password" style="flex:1">
     </div>
     <div class="row">
-      <label>轮询间隔(秒)</label><input id="cfgLiveInt" type="number" min="60">
+      <label data-i18n="lbl_interval">轮询间隔(秒)</label><input id="cfgLiveInt" type="number" min="60">
     </div>
     <div class="row">
-      <label>最低利润率(%)</label><input id="cfgMinProfit" type="number" step="0.1">
-      <label>单组投入比例</label><input id="cfgFraction" type="number" step="0.01" min="0.01" max="1">
+      <label data-i18n="lbl_minprofit">最低利润率(%)</label><input id="cfgMinProfit" type="number" step="0.1">
+      <label data-i18n="lbl_fraction">单组投入比例</label><input id="cfgFraction" type="number" step="0.01" min="0.01" max="1">
     </div>
     <div class="row">
-      <label>单组上限(AUD)</label><input id="cfgMaxStake" type="number" step="100">
-      <label>自动下单</label>
-      <select id="cfgAutoBet"><option value="1">开启</option><option value="0">关闭</option></select>
+      <label data-i18n="lbl_maxstake">单组上限(AUD)</label><input id="cfgMaxStake" type="number" step="100">
+      <label data-i18n="lbl_autobet">自动下单</label>
+      <select id="cfgAutoBet"><option value="1" data-i18n="opt_on">开启</option><option value="0" data-i18n="opt_off">关闭</option></select>
     </div>
     <div class="row">
-      <button class="primary" onclick="saveConfig()">保存设置</button>
-      <button onclick="pollNow()">立即抓取一次</button>
-      <button class="danger" onclick="resetAccount()">重置账户</button>
+      <button class="primary" onclick="saveConfig()" data-i18n="btn_save">保存设置</button>
+      <button onclick="pollNow()" data-i18n="btn_pollnow">立即抓取一次</button>
+      <button class="danger" onclick="resetAccount()" data-i18n="btn_reset">重置账户</button>
     </div>
     <div class="sub" id="pollInfo"></div>
     <div class="err" id="lastError"></div>
   </div>
 
   <div class="panel">
-    <h2>抓取频率说明</h2>
-    <div class="sub" style="line-height:1.8">
+    <h2 data-i18n="panel_freq">抓取频率说明</h2>
+    <div class="sub" style="line-height:1.8" data-i18n-html="freq_html">
       live 模式使用 The Odds API（合法聚合澳洲博彩商赔率），<b style="color:var(--text)">1 次轮询 = 1 个配额积分</b>。
       免费档 500 积分/月：<br>
       · 间隔 2 小时 ≈ 360 次/月 ✓ 安全<br>
@@ -178,7 +179,7 @@
   </div>
 
   <div class="panel">
-    <h2>事件日志</h2>
+    <h2 data-i18n="panel_logs">事件日志</h2>
     <div id="logsWrap"></div>
   </div>
 </div>
@@ -190,43 +191,173 @@
     <h3 id="bmTitle">下单助手</h3>
     <div class="sub" id="bmSub"></div>
     <div class="row" style="margin-top:10px">
-      <label>计划总投入 (AUD)</label>
+      <label data-i18n="helper_total">计划总投入 (AUD)</label>
       <input id="bmTotal" type="number" value="1000" min="10" step="50" oninput="recalcHelper()">
       <span class="sub" id="bmBalance"></span>
     </div>
     <div id="bmLegs"></div>
     <div class="summary-box" id="bmSummary"></div>
-    <div class="sub" style="line-height:1.7">
+    <div class="sub" style="line-height:1.7" data-i18n="helper_steps">
       操作顺序：① 按下方金额到各家网站分别下注 → ② 全部下完后点「记入模拟账户」。
       记账只影响模拟账户，不会真实下注；金额会从模拟余额扣除，开赛后自动按锁定赔付结算。
     </div>
     <div class="row" style="margin-top:12px">
-      <button class="primary" onclick="recordManualBet()">记入模拟账户</button>
-      <button onclick="closeBetHelper()">取消</button>
+      <button class="primary" onclick="recordManualBet()" data-i18n="btn_record">记入模拟账户</button>
+      <button onclick="closeBetHelper()" data-i18n="btn_cancel">取消</button>
       <span class="err" id="bmError"></span>
     </div>
   </div>
 </div>
 
 <script>
+// ====================== i18n ======================
+const I18N = {
+  zh: {
+    title: "世界杯套利监控 · 模拟账户",
+    h1: "⚽ 世界杯跨平台套利监控",
+    subtitle: "澳洲博彩商赔率对比 · 模拟账户自动下单 · 数据仅供学习研究",
+    modeTag: "LIVE 真实赔率",
+    st_running: "运行中", st_error: "抓取异常",
+    st_last: "上次抓取：", st_next: "下次抓取：", st_matches: "监控比赛：", st_matches_suf: "场",
+    notify: "发现机会时桌面提醒", not_fetched: "尚未抓取", sec_suffix: " 秒后",
+    card_equity: "账户净值 (AUD)", card_balance: "可用余额 (AUD)", card_return: "累计收益率",
+    card_counts: "已结算 / 持仓中", card_profit: "累计利润 (AUD)", card_resets: "归零重置次数",
+    card_quota: "API 剩余配额",
+    panel_chart: "收益率曲线（净值 = 余额 + 持仓锁定赔付）",
+    panel_opps: "实时套利机会", panel_opps_hint: "· 点「下单助手」算注金/记账",
+    panel_open: "持仓中（开赛后自动结算）",
+    panel_market: "市场总览", panel_market_hint: "· 全部比赛离套利有多近（每次抓取刷新）",
+    panel_history: "下单历史", panel_settings: "设置", panel_freq: "抓取频率说明", panel_logs: "事件日志",
+    lbl_key: "API Key", ph_key: "the-odds-api.com 获取", ph_key_set: "已设置 ",
+    lbl_interval: "轮询间隔(秒)", lbl_minprofit: "最低利润率(%)", lbl_fraction: "单组投入比例",
+    lbl_maxstake: "单组上限(AUD)", lbl_autobet: "自动下单", opt_on: "开启", opt_off: "关闭",
+    btn_save: "保存设置", btn_pollnow: "立即抓取一次", btn_reset: "重置账户",
+    freq_html: 'live 模式使用 The Odds API（合法聚合澳洲博彩商赔率），<b style="color:var(--text)">1 次轮询 = 1 个配额积分</b>。免费档 500 积分/月：<br>· 间隔 2 小时 ≈ 360 次/月 ✓ 安全<br>· 间隔 90 分钟 ≈ 480 次/月 ⚠ 接近上限<br>· 间隔 30 分钟 ≈ 1440 次/月 ✗ 超额<br>系统遇到 429 限流会自动指数退避。请勿直接爬取博彩网站页面（违反其服务条款且有 IP 封禁风险）。',
+    th_match: "比赛", th_kickoff: "开赛", th_best: "最优组合", th_profit: "利润率", th_status: "状态",
+    th_bestodds: "各结果最优赔率", th_arbrate: "套利率", th_settletime: "结算时间", th_placetime: "下单时间",
+    th_legs: "各腿明细", th_stake: "投入", th_profit2: "利润",
+    empty_opps: "当前行情未发现套利空间（真实大赛盘口效率高，机会稀少且短暂；可看下方「市场总览」了解离套利有多近）",
+    empty_market: "暂无行情，点「立即抓取一次」或等待下次轮询", empty_records: "暂无记录", empty_logs: "暂无日志",
+    tag_settled: "已结算", tag_voided: "已作废", tag_pending: "待开赛", tag_manual: "手动",
+    btn_help: "下单助手", arb_pre: "套利", kickoff_pre: "开赛",
+    helper_title: "下单助手 · ", helper_kickoff: "开赛 ", helper_arbrate: " · 套利率 ",
+    helper_balance: "模拟可用余额 ", helper_bet: "下注", helper_copy: "复制金额",
+    helper_goto: "前往 ", helper_recover: "若此结果发生，回收 ",
+    helper_sum_total: "总投入 ", helper_sum_recover: " · 保底回收 ", helper_sum_pnl: " · 保底盈亏 ",
+    helper_warn: "⚠ 当前为非套利价，三个结果都不亏需要正套利率；此单为模拟练习",
+    helper_steps: "操作顺序：① 按下方金额到各家网站分别下注 → ② 全部下完后点「记入模拟账户」。记账只影响模拟账户，不会真实下注；金额会从模拟余额扣除，开赛后自动按锁定赔付结算。",
+    btn_record: "记入模拟账户", btn_cancel: "取消",
+    confirm_reset: "确定重置账户？余额将恢复为初始资金，未结算持仓将作废。",
+    alert_notinmarket: "该比赛已不在当前行情中，请先抓取最新赔率",
+    err_backend: "无法连接后端：", err_record: "记账失败",
+    notif_title: "发现套利机会 +", chart_legend: "净值 (AUD)", chart_balance: "余额 ",
+  },
+  en: {
+    title: "World Cup Arbitrage Monitor · Paper Account",
+    h1: "⚽ World Cup Cross-Book Arbitrage Monitor",
+    subtitle: "Australian bookmaker odds comparison · paper-account auto-betting · for study only",
+    modeTag: "LIVE odds",
+    st_running: "Running", st_error: "Fetch error",
+    st_last: "Last fetch: ", st_next: "Next fetch: ", st_matches: "Matches: ", st_matches_suf: "",
+    notify: "Desktop alert on opportunity", not_fetched: "not yet", sec_suffix: "s",
+    card_equity: "Equity (AUD)", card_balance: "Available (AUD)", card_return: "Total return",
+    card_counts: "Settled / Open", card_profit: "Total profit (AUD)", card_resets: "Resets",
+    card_quota: "API quota left",
+    panel_chart: "Equity curve (equity = balance + locked open payout)",
+    panel_opps: "Live arbitrage opportunities", panel_opps_hint: "· click “Bet Helper” to size & log",
+    panel_open: "Open positions (auto-settle at kickoff)",
+    panel_market: "Market overview", panel_market_hint: "· how close each match is to an arb (refreshes each fetch)",
+    panel_history: "Bet history", panel_settings: "Settings", panel_freq: "About fetch frequency", panel_logs: "Event log",
+    lbl_key: "API Key", ph_key: "get one at the-odds-api.com", ph_key_set: "set ",
+    lbl_interval: "Poll interval (s)", lbl_minprofit: "Min profit (%)", lbl_fraction: "Stake fraction",
+    lbl_maxstake: "Max stake (AUD)", lbl_autobet: "Auto-bet", opt_on: "On", opt_off: "Off",
+    btn_save: "Save", btn_pollnow: "Fetch now", btn_reset: "Reset account",
+    freq_html: 'Live mode uses The Odds API (a legal aggregator of Australian bookmaker odds). <b style="color:var(--text)">1 poll = 1 quota credit</b>. Free tier is 500 credits/month:<br>· every 2h ≈ 360/mo ✓ safe<br>· every 90min ≈ 480/mo ⚠ near limit<br>· every 30min ≈ 1440/mo ✗ over<br>On HTTP 429 it backs off exponentially. Do NOT scrape bookmaker sites directly (violates their ToS and risks IP bans).',
+    th_match: "Match", th_kickoff: "Kickoff", th_best: "Best combo", th_profit: "Profit", th_status: "Status",
+    th_bestodds: "Best odds per outcome", th_arbrate: "Arb %", th_settletime: "Settled at", th_placetime: "Placed at",
+    th_legs: "Legs", th_stake: "Stake", th_profit2: "Profit",
+    empty_opps: "No arbitrage in current odds (big events are efficient — opportunities are rare and short-lived; see Market overview below for how close).",
+    empty_market: "No odds yet — click “Fetch now” or wait for the next poll.", empty_records: "No records", empty_logs: "No logs",
+    tag_settled: "Settled", tag_voided: "Voided", tag_pending: "Pending", tag_manual: "Manual",
+    btn_help: "Bet Helper", arb_pre: "Arb", kickoff_pre: "kickoff",
+    helper_title: "Bet Helper · ", helper_kickoff: "Kickoff ", helper_arbrate: " · arb ",
+    helper_balance: "Paper balance ", helper_bet: "Bet", helper_copy: "Copy",
+    helper_goto: "Go to ", helper_recover: "If this outcome hits, returns ",
+    helper_sum_total: "Total ", helper_sum_recover: " · Guaranteed return ", helper_sum_pnl: " · Guaranteed P&L ",
+    helper_warn: "⚠ Not an arb price — profiting on every outcome needs a positive arb %; this is practice only.",
+    helper_steps: "Steps: ① place each stake below at each site → ② click “Log to paper account” once all done. Logging only affects the paper account (no real bets); the amount is deducted from the paper balance and auto-settles at kickoff.",
+    btn_record: "Log to paper account", btn_cancel: "Cancel",
+    confirm_reset: "Reset account? Balance returns to the initial amount and open positions are voided.",
+    alert_notinmarket: "This match is no longer in the current odds — fetch the latest first.",
+    err_backend: "Cannot reach backend: ", err_record: "Logging failed",
+    notif_title: "Arbitrage found +", chart_legend: "Equity (AUD)", chart_balance: "Balance ",
+  },
+};
+let lang = localStorage.getItem("lang") || "zh";
+function t(k) { return (I18N[lang][k] ?? I18N.zh[k] ?? k); }
+
+// 把后端中文（机会状态 / 日志 / 净值备注）在英文模式下翻译过来
+function tMsg(s) {
+  if (lang !== "en" || !s) return s;
+  return s
+    .replace(/^抓取成功：(\d+) 场比赛，(\d+) 个套利机会$/, "Fetched: $1 matches, $2 arb(s)")
+    .replace(/^行情获取失败：/, "Fetch failed: ")
+    .replace(/^自动下单 (.+)：投入 (.+)，锁定利润 (.+)（(.+)%）$/, "Auto bet $1: stake $2, locked profit $3 ($4%)")
+    .replace(/^手动下单 (.+)：投入 (.+)，锁定利润 (.+)（(.+)%）$/, "Manual bet $1: stake $2, locked profit $3 ($4%)")
+    .replace(/^结算 (.+)：\+(.+)（利润 (.+)）$/, "Settled $1: +$2 (profit $3)")
+    .replace(/^下单 (.+)$/, "Bet $1")
+    .replace(/^结算 (.+)$/, "Settled $1")
+    .replace(/^连接 API · 真实基线$/, "API connected · baseline")
+    .replace(/^初始资金$/, "Initial funds")
+    .replace(/余额归零，自动重置，资金恢复至 (.+) AUD/, "Balance hit zero, auto-reset to $1 AUD")
+    .replace(/手动重置，资金恢复至 (.+) AUD/, "Manual reset to $1 AUD")
+    .replace(/^手动重置$/, "Manual reset")
+    .replace(/清空历史数据，从连接 API 起作为真实基线，资金 (.+) AUD/, "History cleared; baseline from API connection, funds $1 AUD")
+    .replace(/恢复连接 API 后 (\d+) 笔真实下单，投入合计 (.+)/, "Restored $1 real bets after API connection, total stake $2")
+    .replace(/网络请求失败（(.+)）/, "Network request failed ($1)")
+    .replace(/请求过于频繁（429）.*/, "Rate limited (429), polling slowed automatically")
+    .replace(/API key 无效（401）/, "Invalid API key (401)")
+    .replace(/未配置 The Odds API key.*/, "The Odds API key not set (enter it in Settings)")
+    .replace(/赛事 (.+) 不支持 h2h 市场.*/, "Event $1 has no h2h market; excluded and will re-pick")
+    .replace(/在 The Odds API 中未找到进行中的世界杯单场赛事.*/, "No live World Cup match markets found on The Odds API")
+    .replace(/The Odds API 返回 HTTP (\d+)/, "The Odds API returned HTTP $1")
+    .replace(/赛事列表请求失败（HTTP (\d+)）/, "Sports list request failed (HTTP $1)");
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+  document.getElementById("langBtn").textContent = lang === "en" ? "中" : "EN";
+  document.title = t("title");
+  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll("[data-i18n-html]").forEach(el => el.innerHTML = t(el.dataset.i18nHtml));
+}
+function toggleLang() {
+  lang = lang === "en" ? "zh" : "en";
+  localStorage.setItem("lang", lang);
+  applyLang();
+  if (latest) refresh();
+}
+
+// ====================== 主逻辑 ======================
 let chart = null;
 let lastArbKeys = new Set();   // 用于桌面提醒去重
 let helperState = null;        // 当前下单助手对应的比赛
 let latest = null;             // 最近一次 /api/state 快照
 
+function locale() { return lang === "en" ? "en-AU" : "zh-CN"; }
 function fmt(n, d = 2) { return Number(n).toLocaleString("en-AU", {minimumFractionDigits: d, maximumFractionDigits: d}); }
-function ts2str(ts) { return ts ? new Date(ts * 1000).toLocaleString("zh-CN", {hour12: false}) : "–"; }
-function ts2time(ts) { return ts ? new Date(ts * 1000).toLocaleTimeString("zh-CN", {hour12: false}) : "–"; }
+function ts2str(ts) { return ts ? new Date(ts * 1000).toLocaleString(locale(), {hour12: false}) : "–"; }
+function ts2time(ts) { return ts ? new Date(ts * 1000).toLocaleTimeString(locale(), {hour12: false}) : "–"; }
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
 async function refresh() {
   let s;
   try { s = await (await fetch("/api/state")).json(); }
-  catch (e) { document.getElementById("lastError").textContent = "无法连接后端：" + e; return; }
+  catch (e) { document.getElementById("lastError").textContent = t("err_backend") + e; return; }
   s._fetchedAt = Date.now();
   latest = s;
 
-  document.getElementById("modeTag").textContent = "LIVE 真实赔率";
+  document.getElementById("modeTag").textContent = t("modeTag");
   document.getElementById("equity").textContent = fmt(s.equity);
   document.getElementById("balance").textContent = fmt(s.balance);
   const rp = document.getElementById("returnPct");
@@ -237,7 +368,7 @@ async function refresh() {
   tp.textContent = (s.stats.total_profit >= 0 ? "+" : "") + fmt(s.stats.total_profit);
   tp.className = "value " + (s.stats.total_profit >= 0 ? "pos" : "neg");
   document.getElementById("resets").textContent = s.resets;
-  document.getElementById("quota").textContent = s.quota ? (s.quota.remaining ?? "?") : (s.config.mode === "demo" ? "不消耗" : "–");
+  document.getElementById("quota").textContent = s.quota ? (s.quota.remaining ?? "?") : "–";
 
   drawChart(s.equity_curve);
   renderOpps(s.opportunities);
@@ -248,15 +379,15 @@ async function refresh() {
   fillConfig(s.config);
 
   // 状态栏
-  document.getElementById("stLast").textContent = s.last_poll_ts ? ts2str(s.last_poll_ts) : "尚未抓取";
+  document.getElementById("stLast").textContent = s.last_poll_ts ? ts2str(s.last_poll_ts) : t("not_fetched");
   document.getElementById("stMatches").textContent = (s.market_view || []).length;
   const dot = document.getElementById("liveDot");
   dot.style.background = s.last_error ? "var(--red)" : "var(--green)";
-  document.getElementById("stRunning").textContent = s.last_error ? "抓取异常" : "运行中";
+  document.getElementById("stRunning").textContent = s.last_error ? t("st_error") : t("st_running");
 
   document.getElementById("pollInfo").textContent =
-    "上次抓取：" + ts2str(s.last_poll_ts) + " · 下次抓取：" + Math.max(0, Math.round(s.next_poll_at - s.now)) + " 秒后";
-  document.getElementById("lastError").textContent = s.last_error ? "⚠ " + s.last_error : "";
+    t("st_last") + ts2str(s.last_poll_ts) + " · " + t("st_next") + Math.max(0, Math.round(s.next_poll_at - s.now)) + t("sec_suffix");
+  document.getElementById("lastError").textContent = s.last_error ? "⚠ " + tMsg(s.last_error) : "";
 
   // 若下单助手开着，用最新赔率刷新它
   if (helperState && document.getElementById("betModal").classList.contains("show")) {
@@ -270,11 +401,12 @@ async function refresh() {
 function drawChart(curve) {
   const labels = curve.map(p => ts2time(p.ts));
   const data = curve.map(p => p.equity);
+  const tip = ctx => { const p = curve[ctx.dataIndex]; return t("chart_balance") + fmt(p.balance) + " · " + tMsg(p.note || ""); };
   if (!chart) {
     chart = new Chart(document.getElementById("chart"), {
       type: "line",
       data: { labels, datasets: [{
-        label: "净值 (AUD)", data, borderColor: "#3fb950",
+        label: t("chart_legend"), data, borderColor: "#3fb950",
         backgroundColor: "rgba(63,185,80,0.08)", fill: true,
         tension: 0.25, pointRadius: 0, borderWidth: 2,
       }]},
@@ -282,10 +414,7 @@ function drawChart(curve) {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "index", intersect: false },
         plugins: { legend: { labels: { color: "#8b949e" } },
-          tooltip: { callbacks: { afterLabel: ctx => {
-            const p = curve[ctx.dataIndex];
-            return "余额 " + fmt(p.balance) + " · " + (p.note || "");
-          }}}},
+          tooltip: { callbacks: { afterLabel: tip }}},
         scales: {
           x: { ticks: { color: "#8b949e", maxTicksLimit: 10 }, grid: { color: "#21262d" } },
           y: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
@@ -294,35 +423,33 @@ function drawChart(curve) {
     });
   } else {
     chart.data.labels = labels;
+    chart.data.datasets[0].label = t("chart_legend");
     chart.data.datasets[0].data = data;
-    chart.options.plugins.tooltip.callbacks.afterLabel = ctx => {
-      const p = curve[ctx.dataIndex];
-      return "余额 " + fmt(p.balance) + " · " + (p.note || "");
-    };
+    chart.options.plugins.tooltip.callbacks.afterLabel = tip;
     chart.update("none");
   }
 }
 
 function renderOpps(opps) {
   const el = document.getElementById("oppsWrap");
-  if (!opps.length) { el.innerHTML = '<div class="empty">当前行情未发现套利空间（真实大赛盘口效率高，机会稀少且短暂；可看下方「市场总览」了解离套利有多近）</div>'; return; }
-  let html = '<table><tr><th>比赛</th><th>开赛</th><th>最优组合</th><th>利润率</th><th>状态</th><th></th></tr>';
+  if (!opps.length) { el.innerHTML = `<div class="empty">${t("empty_opps")}</div>`; return; }
+  let html = `<table><tr><th>${t("th_match")}</th><th>${t("th_kickoff")}</th><th>${t("th_best")}</th><th>${t("th_profit")}</th><th>${t("th_status")}</th><th></th></tr>`;
   for (const o of opps) {
     const legs = o.legs.map(l => esc(l.outcome) + " @" + l.odds + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
-    const cls = o.status === "已下单" || o.status === "已持仓" ? "ok" : "warn";
+    const cls = (o.status === "已下单" || o.status === "已持仓") ? "ok" : "warn";
     html += `<tr><td>${esc(o.match_name)}</td><td>${ts2time(o.commence_ts)}</td>
       <td class="legs">${legs}</td>
       <td class="pos">+${o.profit_pct.toFixed(2)}%</td>
-      <td><span class="tag ${cls}">${esc(o.status)}</span></td>
-      <td><button class="btn-help" onclick="openBetHelper('${o.event_id}')">下单助手</button></td></tr>`;
+      <td><span class="tag ${cls}">${esc(tMsg(o.status))}</span></td>
+      <td><button class="btn-help" onclick="openBetHelper('${o.event_id}')">${t("btn_help")}</button></td></tr>`;
   }
   el.innerHTML = html + "</table>";
 }
 
 function renderMarket(market) {
   const el = document.getElementById("marketWrap");
-  if (!market.length) { el.innerHTML = '<div class="empty">暂无行情，点「立即抓取一次」或等待下次轮询</div>'; return; }
-  let html = '<table><tr><th>比赛</th><th>开赛</th><th>各结果最优赔率</th><th>套利率</th><th></th></tr>';
+  if (!market.length) { el.innerHTML = `<div class="empty">${t("empty_market")}</div>`; return; }
+  let html = `<table><tr><th>${t("th_match")}</th><th>${t("th_kickoff")}</th><th>${t("th_bestodds")}</th><th>${t("th_arbrate")}</th><th></th></tr>`;
   for (const m of market.slice(0, 25)) {
     const legs = m.legs.map(l => esc(l.outcome) + " @" + l.odds + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
     const cls = m.profit_pct >= 0 ? "pos" : "neg";
@@ -330,27 +457,26 @@ function renderMarket(market) {
     html += `<tr><td>${esc(m.match_name)}</td><td>${ts2time(m.commence_ts)}</td>
       <td class="legs">${legs}</td>
       <td class="${cls}">${sign}${m.profit_pct.toFixed(2)}%</td>
-      <td><button class="btn-help" onclick="openBetHelper('${m.event_id}')">下单助手</button></td></tr>`;
+      <td><button class="btn-help" onclick="openBetHelper('${m.event_id}')">${t("btn_help")}</button></td></tr>`;
   }
   el.innerHTML = html + "</table>";
 }
 
 function renderGroups(id, groups, isHistory) {
   const el = document.getElementById(id);
-  if (!groups.length) { el.innerHTML = '<div class="empty">暂无记录</div>'; return; }
-  let html = '<table><tr><th>' + (isHistory ? "结算时间" : "下单时间") +
-    '</th><th>比赛</th><th>各腿明细</th><th>投入</th><th>利润</th><th>状态</th></tr>';
+  if (!groups.length) { el.innerHTML = `<div class="empty">${t("empty_records")}</div>`; return; }
+  let html = `<table><tr><th>${isHistory ? t("th_settletime") : t("th_placetime")}</th><th>${t("th_match")}</th><th>${t("th_legs")}</th><th>${t("th_stake")}</th><th>${t("th_profit2")}</th><th>${t("th_status")}</th></tr>`;
   for (const g of groups) {
     const legs = g.legs.map(l =>
       esc(l.outcome) + " @" + l.odds + " × $" + fmt(l.stake) + " <i>(" + esc(l.bookmaker) + ")</i>").join("<br>");
-    const st = g.status === "settled" ? '<span class="tag ok">已结算</span>'
-             : g.status === "voided" ? '<span class="tag warn">已作废</span>'
-             : '<span class="tag info">待开赛</span>';
+    const st = g.status === "settled" ? `<span class="tag ok">${t("tag_settled")}</span>`
+             : g.status === "voided" ? `<span class="tag warn">${t("tag_voided")}</span>`
+             : `<span class="tag info">${t("tag_pending")}</span>`;
     const profitCell = g.status === "voided" ? "–"
       : `<span class="${g.profit >= 0 ? "pos" : "neg"}">${g.profit >= 0 ? "+" : ""}${fmt(g.profit)}</span>`;
-    const src = g.source === "manual" ? '<span class="tag info" style="font-size:10px">手动</span> ' : "";
+    const src = g.source === "manual" ? `<span class="tag info" style="font-size:10px">${t("tag_manual")}</span> ` : "";
     html += `<tr><td>${ts2str(isHistory ? (g.settled_at || g.placed_at) : g.placed_at)}</td>
-      <td>${src}${esc(g.match_name)}<br><i class="legs">套利 ${g.profit_pct.toFixed(2)}% · 开赛 ${ts2time(g.commence_ts)}</i></td>
+      <td>${src}${esc(g.match_name)}<br><i class="legs">${t("arb_pre")} ${g.profit_pct.toFixed(2)}% · ${t("kickoff_pre")} ${ts2time(g.commence_ts)}</i></td>
       <td class="legs">${legs}</td><td>$${fmt(g.total_stake)}</td>
       <td>${profitCell}</td><td>${st}</td></tr>`;
   }
@@ -359,8 +485,8 @@ function renderGroups(id, groups, isHistory) {
 
 function renderLogs(logs) {
   document.getElementById("logsWrap").innerHTML = logs.map(l =>
-    `<div class="logline"><b>${ts2time(l.ts)}</b> ${esc(l.message)}</div>`).join("")
-    || '<div class="empty">暂无日志</div>';
+    `<div class="logline"><b>${ts2time(l.ts)}</b> ${esc(tMsg(l.message))}</div>`).join("")
+    || `<div class="empty">${t("empty_logs")}</div>`;
 }
 
 let configDirty = false;
@@ -370,7 +496,7 @@ let configDirty = false;
 function fillConfig(cfg) {
   if (configDirty) return;   // 用户正在编辑时不覆盖
   const keyEl = document.getElementById("cfgKey");
-  if (document.activeElement !== keyEl) keyEl.placeholder = cfg.odds_api_key_set ? "已设置 " + cfg.odds_api_key : "the-odds-api.com 获取";
+  if (document.activeElement !== keyEl) keyEl.placeholder = cfg.odds_api_key_set ? t("ph_key_set") + cfg.odds_api_key : t("ph_key");
   document.getElementById("cfgLiveInt").value = cfg.poll_interval_live;
   document.getElementById("cfgMinProfit").value = cfg.min_profit_pct;
   document.getElementById("cfgFraction").value = cfg.stake_fraction;
@@ -401,12 +527,12 @@ async function pollNow() {
 }
 
 async function resetAccount() {
-  if (!confirm("确定重置账户？余额将恢复为初始资金，未结算持仓将作废。")) return;
+  if (!confirm(t("confirm_reset"))) return;
   await fetch("/api/reset", {method: "POST"});
   refresh();
 }
 
-// ---------- 下单助手 ----------
+// ---------- 下单助手 / bet helper ----------
 function bookieLink(name) {
   if (!latest || !latest.bookmaker_links) return null;
   const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -419,12 +545,12 @@ function bookieLink(name) {
 function openBetHelper(eventId) {
   if (!latest) return;
   const m = (latest.market_view || []).find(x => x.event_id === eventId);
-  if (!m) { alert("该比赛已不在当前行情中，请先抓取最新赔率"); return; }
+  if (!m) { alert(t("alert_notinmarket")); return; }
   helperState = {...m, balance: latest.balance, links: latest.bookmaker_links};
-  document.getElementById("bmTitle").textContent = "下单助手 · " + m.match_name;
+  document.getElementById("bmTitle").textContent = t("helper_title") + m.match_name;
   document.getElementById("bmSub").textContent =
-    "开赛 " + ts2str(m.commence_ts) + " · 套利率 " + (m.profit_pct >= 0 ? "+" : "") + m.profit_pct.toFixed(2) + "%";
-  document.getElementById("bmBalance").textContent = "模拟可用余额 " + fmt(latest.balance);
+    t("helper_kickoff") + ts2str(m.commence_ts) + t("helper_arbrate") + (m.profit_pct >= 0 ? "+" : "") + m.profit_pct.toFixed(2) + "%";
+  document.getElementById("bmBalance").textContent = t("helper_balance") + fmt(latest.balance);
   document.getElementById("bmError").textContent = "";
   document.getElementById("betModal").classList.add("show");
   recalcHelper();
@@ -441,12 +567,12 @@ function recalcHelper() {
     const payout = stake * l.odds;
     payouts.push(payout);
     const link = bookieLink(l.bookmaker);
-    const linkHtml = link ? `<a href="${link}" target="_blank">前往 ${esc(l.bookmaker)} ↗</a>` : esc(l.bookmaker);
+    const linkHtml = link ? `<a href="${link}" target="_blank">${t("helper_goto")}${esc(l.bookmaker)} ↗</a>` : esc(l.bookmaker);
     html += `<div class="leg-card">
       <div class="top"><b>${esc(l.outcome)}</b> <span class="sub">@ ${l.odds} · ${linkHtml}</span></div>
-      <div class="stake-line">下注 $${fmt(stake)}
-        <button class="copybtn" onclick="navigator.clipboard.writeText('${stake.toFixed(2)}')">复制金额</button></div>
-      <div class="sub">若此结果发生，回收 $${fmt(payout)}</div>
+      <div class="stake-line">${t("helper_bet")} $${fmt(stake)}
+        <button class="copybtn" onclick="navigator.clipboard.writeText('${stake.toFixed(2)}')">${t("helper_copy")}</button></div>
+      <div class="sub">${t("helper_recover")}$${fmt(payout)}</div>
     </div>`;
   }
   document.getElementById("bmLegs").innerHTML = html;
@@ -455,9 +581,9 @@ function recalcHelper() {
   const profitPct = total > 0 ? (profit / total * 100) : 0;
   const cls = profit >= 0 ? "pos" : "neg";
   document.getElementById("bmSummary").innerHTML =
-    `总投入 <b>$${fmt(total)}</b> · 保底回收 <b>$${fmt(minPayout)}</b> · ` +
-    `保底盈亏 <b class="${cls}">${profit >= 0 ? "+" : ""}${fmt(profit)}（${profitPct >= 0 ? "+" : ""}${profitPct.toFixed(2)}%）</b>` +
-    (profit < 0 ? '<br><span class="neg">⚠ 当前为非套利价，三个结果都不亏需要正套利率；此单为模拟练习</span>' : "");
+    `${t("helper_sum_total")}<b>$${fmt(total)}</b>${t("helper_sum_recover")}<b>$${fmt(minPayout)}</b>${t("helper_sum_pnl")}` +
+    `<b class="${cls}">${profit >= 0 ? "+" : ""}${fmt(profit)}（${profitPct >= 0 ? "+" : ""}${profitPct.toFixed(2)}%）</b>` +
+    (profit < 0 ? `<br><span class="neg">${t("helper_warn")}</span>` : "");
 }
 
 async function recordManualBet() {
@@ -468,7 +594,7 @@ async function recordManualBet() {
     body: JSON.stringify({event_id: helperState.event_id, total_stake: total}),
   })).json();
   if (r.ok) { closeBetHelper(); refresh(); }
-  else document.getElementById("bmError").textContent = "✕ " + (r.error || "记账失败");
+  else document.getElementById("bmError").textContent = "✕ " + (r.error ? tMsg(r.error) : t("err_record"));
 }
 
 function closeBetHelper() {
@@ -479,7 +605,7 @@ document.getElementById("betModal").addEventListener("click", e => {
   if (e.target.id === "betModal") closeBetHelper();
 });
 
-// ---------- 桌面提醒 ----------
+// ---------- 桌面提醒 / desktop notifications ----------
 document.getElementById("notifyToggle").addEventListener("change", e => {
   if (e.target.checked && "Notification" in window && Notification.permission !== "granted") {
     Notification.requestPermission();
@@ -492,7 +618,7 @@ function maybeNotify(opps) {
   if (toggle.checked && "Notification" in window && Notification.permission === "granted") {
     for (const o of opps) {
       if (!lastArbKeys.has(o.event_id)) {
-        new Notification("发现套利机会 +" + o.profit_pct.toFixed(2) + "%", {
+        new Notification(t("notif_title") + o.profit_pct.toFixed(2) + "%", {
           body: o.match_name + "\n" + o.legs.map(l => l.outcome + " @" + l.odds + " (" + l.bookmaker + ")").join("\n"),
         });
       }
@@ -511,6 +637,7 @@ setInterval(() => {
   document.getElementById("stCountdown").textContent = mm + ":" + ss;
 }, 1000);
 
+applyLang();
 refresh();
 setInterval(refresh, 4000);
 </script>
